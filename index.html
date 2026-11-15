@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoundFeed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=Figtree:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Idea de layout: un feed vertical. Arriba el selector de ánimo, debajo las tarjetas
+   con onda; el foro se abre como una sala con hilos a la izquierda y la charla a la derecha. */
+:root {
+  --ink: #0e0b17;
+  --panel: #171225;
+  --panel-2: #20193a;
+  --line: #342b52;
+  --text: #f3effc;
+  --muted: #a398c0;
+  --pink: #ff3d9a;
+  --cyan: #2be3f2;
+  --violet: #7c5cff;
+  --good: #4fe3a1;
+  --warn: #ffc857;
+  --font-display: "Syne", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--ink); color: var(--text); font-family: var(--font-body); font-size: 16px; line-height: 1.5; }
+body { min-height: 100%; background:
+  radial-gradient(900px 420px at 85% -10%, rgba(255,61,154,.16), transparent 60%),
+  radial-gradient(700px 380px at -5% 0%, rgba(43,227,242,.10), transparent 60%),
+  var(--ink); }
+a { color: var(--cyan); }
+button, input, textarea, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.1; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px 64px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.brand span { font-family: var(--font-display); font-weight: 800; font-size: 22px; letter-spacing: -.01em; }
+.brand b { background: linear-gradient(90deg, var(--cyan), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.top-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; color: var(--muted); background: var(--panel); }
+.pill i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); margin-right: 7px; }
+.pill.ok i { background: var(--good); }
+
+.hero { padding: 18px 0 8px; max-width: 760px; }
+.hero h1 { font-size: clamp(32px, 6vw, 54px); font-weight: 800; letter-spacing: -.02em; }
+.hero h1 em { font-style: normal; color: var(--pink); }
+.hero p { color: var(--muted); font-size: 18px; margin: 14px 0 0; max-width: 62ch; }
+
+.picker { margin-top: 24px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: grid; gap: 16px; }
+.picker legend, .picker label.lbl { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; padding: 0; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 14px; cursor: pointer; transition: background .15s, border-color .15s, transform .1s; }
+.chip:hover { border-color: var(--violet); }
+.chip[aria-pressed="true"] { background: var(--pink); border-color: var(--pink); color: #1a0612; font-weight: 700; }
+textarea, input[type="text"], select { width: 100%; background: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 11px 13px; }
+textarea { min-height: 76px; resize: vertical; }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.btn { border: 0; border-radius: 12px; padding: 11px 20px; font-weight: 700; cursor: pointer; background: linear-gradient(90deg, var(--pink), var(--violet)); color: #fff; transition: filter .15s, transform .1s; }
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.btn.small { padding: 7px 14px; font-size: 14px; }
+.hint { color: var(--muted); font-size: 14px; }
+
+.section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 34px 0 14px; flex-wrap: wrap; }
+.section-title h2 { font-size: 24px; }
+.source { font-size: 13px; color: var(--muted); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.card { position: relative; display: flex; flex-direction: column; gap: 10px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; cursor: pointer; transition: border-color .15s, transform .15s, background .15s; }
+.card:hover { border-color: var(--cyan); transform: translateY(-2px); background: var(--panel-2); }
+.card h3 { font-size: 21px; }
+.card .by { color: var(--muted); font-size: 14px; }
+.card .why { font-size: 14px; color: var(--text); opacity: .9; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: rgba(124,92,255,.18); color: #cfc4ff; }
+.wave { display: flex; align-items: flex-end; gap: 3px; height: 34px; }
+.wave span { width: 4px; border-radius: 2px; background: linear-gradient(var(--cyan), var(--pink)); height: calc(var(--h) * 1%); transform-origin: bottom; animation: bar 1.6s ease-in-out infinite; animation-delay: calc(var(--i) * -90ms); }
+@keyframes bar { 0%,100% { transform: scaleY(.45); } 50% { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) { .wave span { animation: none; } .card, .chip { transition: none; } }
+.card .foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: 14px; }
+.card .foot .stat { color: var(--muted); }
+.card .foot .go { color: var(--cyan); font-weight: 700; }
+
+.empty { border: 1px dashed var(--line); border-radius: 16px; padding: 22px; color: var(--muted); }
+.trend { display: grid; gap: 10px; }
+.trend button { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; cursor: pointer; }
+.trend button:hover { border-color: var(--cyan); }
+.trend b { font-family: var(--font-display); }
+.trend small { color: var(--muted); }
+
+/* Foro */
+.back { display: inline-block; margin: 6px 0 14px; text-decoration: none; font-weight: 700; }
+.fhead { display: grid; gap: 10px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+.eyebrow { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--cyan); font-weight: 700; }
+.fhead h1 { font-size: clamp(30px, 5vw, 48px); font-weight: 800; }
+.fhead .by { color: var(--muted); font-size: 18px; }
+.notice { margin: 14px 0 0; padding: 10px 14px; border-radius: 12px; background: rgba(255,200,87,.1); border: 1px solid rgba(255,200,87,.35); color: #ffe3a3; font-size: 14px; }
+.notice.err { background: rgba(255,61,154,.1); border-color: rgba(255,61,154,.4); color: #ffc2de; }
+.forum { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+.forum > aside { position: sticky; top: 16px; order: 2; }
+.room { display: grid; grid-template-columns: minmax(0, 270px) minmax(0, 1fr); gap: 18px; margin-top: 20px; align-items: start; }
+@media (max-width: 1000px) { .forum { grid-template-columns: 1fr; } .forum > aside { position: static; order: 0; } }
+@media (max-width: 760px) { .room { grid-template-columns: 1fr; } }
+.player { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: grid; gap: 12px; }
+.cover { width: 100%; aspect-ratio: 1; border-radius: 12px; background: linear-gradient(135deg, var(--violet), var(--pink)); display: grid; place-items: center; overflow: hidden; color: rgba(255,255,255,.85); font-family: var(--font-display); font-weight: 800; font-size: 56px; }
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.player audio { width: 100%; }
+.player .tt { font-family: var(--font-display); font-weight: 800; font-size: 18px; line-height: 1.2; }
+.player .sm { color: var(--muted); font-size: 14px; }
+.player .ext { font-size: 14px; }
+.cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.cats .chip { padding: 5px 12px; font-size: 14px; }
+.threads { display: grid; gap: 8px; margin-top: 12px; }
+.thread { text-align: left; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--violet); border-radius: 12px; padding: 12px 14px; cursor: pointer; display: grid; gap: 4px; }
+.thread:hover { background: var(--panel-2); }
+.thread[aria-current="true"] { border-color: var(--cyan); background: var(--panel-2); }
+.thread[data-cat="letra"] { border-left-color: var(--pink); }
+.thread[data-cat="debate"] { border-left-color: var(--cyan); }
+.thread[data-cat="anecdotas"] { border-left-color: var(--warn); }
+.thread[data-cat="similares"] { border-left-color: var(--good); }
+.thread b { font-weight: 700; }
+.thread small { color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; min-height: 220px; }
+.panel h2 { font-size: 24px; margin-bottom: 6px; }
+.meta { color: var(--muted); font-size: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.body { white-space: pre-wrap; overflow-wrap: anywhere; margin: 14px 0; }
+.posts { display: grid; gap: 10px; margin: 18px 0; }
+.post { border-top: 1px solid var(--line); padding-top: 12px; }
+.post .meta { margin-bottom: 4px; }
+.like { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 3px 12px; cursor: pointer; font-size: 13px; }
+.like[aria-pressed="true"] { border-color: var(--pink); color: var(--pink); }
+.like[disabled] { cursor: default; opacity: .7; }
+.form { display: grid; gap: 10px; }
+.compose { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); display: grid; gap: 10px; }
+.compose label { font-size: 13px; color: var(--muted); font-weight: 700; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#inicio" aria-label="SoundFeed, ir al inicio">
+      <svg width="38" height="38" viewBox="0 0 48 48" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2be3f2"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient></defs>
+        <path d="M24 5C13 5 5 12.6 5 22.4c0 5.2 2.4 9.7 6.2 12.8L9 43l8.3-4.1c2 .6 4.2.9 6.7.9 11 0 19-7.6 19-17.4S35 5 24 5z" fill="none" stroke="url(#lg)" stroke-width="3" stroke-linejoin="round"/>
+        <g stroke="url(#lg)" stroke-width="3" stroke-linecap="round"><path d="M16 20v6M21 15v16M26 12v22M31 17v12M36 21v4"/></g>
+      </svg>
+      <span>Sound<b>Feed</b></span>
+    </a>
+    <div class="top-right">
+      <span class="pill" id="mode"><i></i><span>Conectando…</span></span>
+      <span class="pill" id="me" hidden></span>
+    </div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Catálogo para el modo sin IA (la IA puede recomendar cualquier canción real) ---------- */
+  const MOODS = { feliz: 'Feliz', triste: 'Triste', energico: 'Enérgico', relajado: 'Relajado', nostalgico: 'Nostálgico', romantico: 'Romántico', motivado: 'Motivado', intenso: 'Intenso', reflexivo: 'Reflexivo' };
+  const MOOD_STEMS = {
+    feliz: ['feliz', 'alegr', 'content', 'animad', 'happy', 'fiest'],
+    triste: ['trist', 'llor', 'dolor', 'ruptur', 'deprim', 'angust', 'sad', 'extra'],
+    energico: ['energi', 'bailar', 'correr', 'gimnas', 'entren', 'salt', 'pila'],
+    relajado: ['relaj', 'tranquil', 'calm', 'dormir', 'estudi', 'paz', 'chill', 'descans'],
+    nostalgico: ['nostalg', 'recuerd', 'infanc', 'pasado'],
+    romantico: ['romant', 'amor', 'enamor', 'cita', 'pareja', 'beso'],
+    motivado: ['motiv', 'supera', 'meta', 'objetiv', 'ganar', 'lograr', 'empuj'],
+    intenso: ['intens', 'enoj', 'rabia', 'furia', 'bronca', 'potente', 'fuert'],
+    reflexivo: ['reflex', 'pensar', 'filosof', 'profund', 'medit', 'sentido'],
+  };
+  const CATALOG = [
+    ['Bohemian Rhapsody', 'Queen', 'Rock', 'intenso,nostalgico,reflexivo'],
+    ['Creep', 'Radiohead', 'Rock alternativo', 'triste,reflexivo,intenso'],
+    ['Happy', 'Pharrell Williams', 'Pop / Soul', 'feliz,energico'],
+    ['Blinding Lights', 'The Weeknd', 'Pop sintético', 'energico,nostalgico,motivado'],
+    ['Someone Like You', 'Adele', 'Pop / Balada', 'triste,romantico,nostalgico'],
+    ['De música ligera', 'Soda Stereo', 'Rock en español', 'nostalgico,energico,feliz'],
+    ['Gracias a la vida', 'Mercedes Sosa', 'Folklore', 'reflexivo,relajado,nostalgico'],
+    ['Muchacha (ojos de papel)', 'Almendra', 'Rock nacional', 'romantico,relajado,nostalgico'],
+    ['bad guy', 'Billie Eilish', 'Pop alternativo', 'intenso,energico'],
+    ['Lose Yourself', 'Eminem', 'Hip hop', 'motivado,intenso,energico'],
+    ["Ain't No Sunshine", 'Bill Withers', 'Soul', 'triste,reflexivo,relajado'],
+    ['Get Lucky', 'Daft Punk', 'Funk / Disco', 'feliz,energico,romantico'],
+    ['Smells Like Teen Spirit', 'Nirvana', 'Grunge', 'intenso,energico'],
+    ['Three Little Birds', 'Bob Marley & The Wailers', 'Reggae', 'relajado,feliz'],
+    ['Dreams', 'Fleetwood Mac', 'Rock suave', 'relajado,nostalgico,romantico,reflexivo'],
+    ['Fix You', 'Coldplay', 'Pop rock', 'triste,motivado,reflexivo'],
+    ['Crimen', 'Gustavo Cerati', 'Rock en español', 'triste,romantico,intenso'],
+    ['Matador', 'Los Fabulosos Cadillacs', 'Ska / Rock', 'energico,intenso'],
+    ['Malamente', 'Rosalía', 'Flamenco pop', 'energico,intenso'],
+    ['Fly Me to the Moon', 'Frank Sinatra', 'Jazz / Swing', 'romantico,relajado,feliz'],
+    ['So What', 'Miles Davis', 'Jazz', 'relajado,reflexivo'],
+    ['HUMBLE.', 'Kendrick Lamar', 'Hip hop', 'energico,intenso,motivado'],
+    ['Love Will Tear Us Apart', 'Joy Division', 'Post-punk', 'triste,nostalgico,intenso'],
+    ['The Less I Know the Better', 'Tame Impala', 'Psicodelia / Pop', 'feliz,energico,nostalgico'],
+    ['Los dinosaurios', 'Charly García', 'Rock nacional', 'reflexivo,intenso,nostalgico'],
+    ['The Girl from Ipanema', 'Stan Getz & João Gilberto', 'Bossa nova', 'relajado,romantico,feliz'],
+  ].map(([title, artist, genre, moods]) => ({ title, artist, genre, moods: moods.split(',') }));
+
+  const CATS = { letra: 'Análisis de letra', debate: 'Debate', anecdotas: 'Anécdotas', similares: 'Si te gusta esto' };
+
+  /* ------------------------------------ Estado ------------------------------------ */
+  const S = {
+    moods: new Set(), text: '', recs: null, recSource: '', loading: false, notice: '',
+    db: null, user: null, sample: null, myId: null, canWrite: false, mode: 'wait',
+    media: {}, forums: {}, threads: [], posts: [], likes: [], tracks: {}, names: {},
+    slug: null, cat: 'todo', threadId: null,
+  };
+  const $ = (s, el) => (el || document).querySelector(s);
+  const view = $('#view');
+  let ui = {}; // referencias a nodos de la vista actual
+
+  function h(tag, props, ...kids) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'text') el.textContent = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) { if (kid == null || kid === false) continue; el.append(kid.nodeType ? kid : document.createTextNode(String(kid))); }
+    return el;
+  }
+  const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const slugify = (artist, title) => norm(`${artist} ${title}`).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'cancion';
+  function ago(ts) {
+    const m = Math.round((Date.now() - ts) / 60000);
+    if (m < 1) return 'recién';
+    if (m < 60) return `hace ${m} min`;
+    const hrs = Math.round(m / 60);
+    if (hrs < 24) return `hace ${hrs} h`;
+    return `hace ${Math.round(hrs / 24)} d`;
+  }
+  const moodName = (m) => MOODS[m] || m;
+
+  /* ------------------------------ Recomendación local ------------------------------ */
+  function detectMoods(text) {
+    const tokens = norm(text).split(/[^a-z]+/).filter(Boolean);
+    return Object.keys(MOOD_STEMS).filter((m) => tokens.some((t) => MOOD_STEMS[m].some((s) => t.startsWith(s))));
+  }
+  function recommendLocal(moods, text) {
+    const chosen = new Set(moods), fromText = new Set(detectMoods(text)), t = norm(text);
+    const scored = CATALOG.map((track) => {
+      let score = 0; const why = [];
+      for (const m of track.moods) {
+        if (chosen.has(m)) { score += 3; why.push(moodName(m).toLowerCase()); }
+        else if (fromText.has(m)) { score += 2; why.push(moodName(m).toLowerCase()); }
+      }
+      if (t.includes(norm(track.artist))) { score += 4; why.push(`te gusta ${track.artist}`); }
+      const words = norm(track.genre).split(/[^a-z]+/).filter((w) => w.length > 3);
+      if (words.some((w) => t.includes(w))) { score += 2; why.push(track.genre.toLowerCase()); }
+      return { track, score, why: [...new Set(why)], r: Math.random() };
+    });
+    const signal = scored.some((x) => x.score > 0);
+    scored.sort((a, b) => (signal ? b.score - a.score : 0) || a.r - b.r);
+    return scored.filter((x) => !signal || x.score > 0).slice(0, 6).map((x) => ({
+      ...x.track,
+      reason: x.why.length ? `Coincide con: ${x.why.join(', ')}.` : 'Una sugerencia al azar para descubrir algo nuevo.',
+    }));
+  }
+
+  /* ------------------------------ Recomendación con Claude ------------------------------ */
+  async function recommendAI(moods, text) {
+    const prompt =
+      'Sos el motor de recomendación de SoundFeed, una app donde cada canción recomendada abre un foro de la comunidad.\n' +
+      `Estados de ánimo elegidos: ${moods.map(moodName).join(', ') || 'ninguno'}.\n` +
+      `Texto libre del usuario: "${text || '(vacío)'}".\n` +
+      'Recomendá 6 canciones reales y conocidas, con el artista correcto, variadas en época y estilo pero coherentes con lo pedido. ' +
+      'No incluyas letras ni citas de letras.\n' +
+      'Respondé SOLO JSON con esta forma: {"canciones":[{"titulo":"","artista":"","genero":"","animos":[],"motivo":""}]}\n' +
+      `"animos" solo puede usar: ${Object.keys(MOODS).join(', ')}. "motivo" es una frase en español de hasta 110 caracteres que explica por qué encaja.`;
+    const out = await S.sample.json(prompt, { modelTier: 'quick' });
+    const list = Array.isArray(out && out.canciones) ? out.canciones : [];
+    const seen = new Set();
+    const recs = [];
+    for (const c of list) {
+      const title = String((c && c.titulo) || '').trim().slice(0, 80), artist = String((c && c.artista) || '').trim().slice(0, 60);
+      if (!title || !artist) continue;
+      const key = slugify(artist, title);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      recs.push({
+        title, artist, genre: String(c.genero || '').slice(0, 40),
+        moods: (Array.isArray(c.animos) ? c.animos : []).filter((m) => MOODS[m]).slice(0, 4),
+        reason: String(c.motivo || '').slice(0, 140),
+      });
+    }
+    if (!recs.length) throw new Error('sin resultados');
+    return recs.slice(0, 6);
+  }
+
+  /* ----------------------------- Datos del foro y escritura ----------------------------- */
+  const trackOf = (slug) => S.forums[slug] || S.tracks[slug] || null;
+
+  function seedThreads(slug, t) {
+    const base = (S.forums[slug] && S.forums[slug].createdAt) || 0;
+    const mood = t.moods && t.moods[0] ? moodName(t.moods[0]).toLowerCase() : 'distinto';
+    const mk = (n, category, title, body) => ({ id: `${slug}:s${n}`, seed: true, category, title, body, createdAt: base, trackId: slug });
+    return [
+      mk(1, 'letra', `¿Qué te transmite "${t.title}"?`, `Abrimos el análisis de la letra de "${t.title}" de ${t.artist}. Contá con tus palabras qué imagen, idea o verso te quedó y por qué. Para respetar a los autores, citá como mucho una frase corta: lo importante es tu interpretación.`),
+      mk(2, 'letra', '¿De qué trata realmente? Interpretaciones', 'Cada oyente la entiende distinto. ¿Es una historia personal, una crítica, una metáfora? Compartí tu lectura y respondé a la de otros.'),
+      mk(3, 'debate', `${t.artist}: ¿es esta su mejor canción?`, `Debate abierto. Defendé tu elección dentro de la discografía de ${t.artist} o proponé otra que la supere.`),
+      mk(4, 'anecdotas', '¿Cuándo y dónde la escuchaste por primera vez?', 'Todas las canciones tienen una historia detrás de quien las escucha. Contanos la tuya.'),
+      mk(5, 'similares', `Si te gusta "${t.title}", escuchá…`, `Recomendá artistas o temas parecidos, sobre todo para quien busca algo ${mood}. Explicá qué tienen en común.`),
+    ];
+  }
+  function threadsOf(slug) {
+    const t = trackOf(slug);
+    if (!t) return [];
+    const mine = S.threads.filter((x) => x.trackId === slug);
+    const all = [...seedThreads(slug, t), ...mine];
+    return all.map((th) => {
+      const posts = S.posts.filter((p) => p.threadId === th.id);
+      return { ...th, replies: posts.length, likes: S.likes.filter((l) => l.targetId === th.id).length,
+        last: Math.max(th.createdAt, ...posts.map((p) => p.createdAt)) };
+    }).sort((a, b) => b.last - a.last);
+  }
+  function statsOf(slug) {
+    const exists = !!S.forums[slug];
+    const own = S.threads.filter((x) => x.trackId === slug).length;
+    const messages = S.posts.filter((p) => p.trackId === slug).length;
+    return { exists, threads: (exists ? 5 : 0) + own, messages };
+  }
+
+  async function guarded(fn) {
+    try { await fn(); S.notice = ''; }
+    catch (e) { S.notice = 'No se pudo guardar. Probá de nuevo en unos segundos.'; }
+    paintNotice();
+  }
+  function localId() { return 'l' + Math.random().toString(36).slice(2, 10); }
+
+  async function ensureForum(track) {
+    const slug = slugify(track.artist, track.title);
+    S.tracks[slug] = track;
+    if (S.forums[slug] || !S.canWrite) return slug;
+    const data = { title: track.title, artist: track.artist, genre: track.genre || '', moods: track.moods || [], createdAt: Date.now(), uid: S.myId };
+    if (S.db) { await guarded(() => S.db.doc('forums/' + slug).set(data)); }
+    else { S.forums[slug] = data; }
+    return slug;
+  }
+  async function addThread(slug, category, title, body) {
+    const data = { trackId: slug, category, title, body, uid: S.myId, createdAt: Date.now() };
+    if (S.db) { let id; await guarded(async () => { const ref = await S.db.collection('threads').add(data); id = ref.id; }); return id; }
+    const id = localId(); S.threads.push({ id, ...data }); refresh(); return id;
+  }
+  async function addPost(slug, threadId, body) {
+    const data = { trackId: slug, threadId, body, uid: S.myId, createdAt: Date.now() };
+    if (S.db) { await guarded(() => S.db.collection('posts').add(data)); return; }
+    S.posts.push({ id: localId(), ...data }); refresh();
+  }
+  async function toggleLike(slug, targetId) {
+    const id = `${targetId}_${S.myId}`;
+    const mine = S.likes.some((l) => l.targetId === targetId && l.uid === S.myId);
+    if (S.db) {
+      await guarded(() => (mine ? S.db.doc('likes/' + id).delete() : S.db.doc('likes/' + id).set({ trackId: slug, targetId, uid: S.myId })));
+      return;
+    }
+    if (mine) S.likes = S.likes.filter((l) => !(l.targetId === targetId && l.uid === S.myId));
+    else S.likes.push({ id, trackId: slug, targetId, uid: S.myId });
+    refresh();
+  }
+
+  /* ------------------------------ Nombres de personas ------------------------------ */
+  async function resolveNames(ids) {
+    const need = [...new Set(ids.filter((i) => i && !(i in S.names)))];
+    if (!need.length) return false;
+    if (!S.user) { need.forEach((i) => { S.names[i] = 'Oyente'; }); return true; }
+    try {
+      const ps = await S.user.profiles(need);
+      need.forEach((i) => { S.names[i] = (ps[i] && ps[i].name) || 'Oyente'; });
+    } catch (_) { need.forEach((i) => { S.names[i] = 'Oyente'; }); }
+    return true;
+  }
+  const who = (th) => (th.seed ? 'SoundFeed' : S.names[th.uid] || '…');
+
+  /* ----------------------------------- Vistas ----------------------------------- */
+  function paintMode() {
+    const pill = $('#mode');
+    const ok = S.mode === 'shared';
+    pill.className = 'pill' + (ok ? ' ok' : '');
+    pill.lastChild.textContent = S.mode === 'wait' ? 'Conectando…' : ok ? 'Foro compartido' : 'Modo demo (solo en esta pestaña)';
+  }
+  function paintNotice() {
+    if (!ui.notice) return;
+    let msg = S.notice, err = !!S.notice;
+    if (!msg && S.slug && S.db && !S.canWrite) msg = 'Estás en modo lectura. Pedile al dueño acceso de colaborador para publicar.';
+    ui.notice.textContent = msg || '';
+    ui.notice.hidden = !msg;
+    ui.notice.className = 'notice' + (err ? ' err' : '');
+  }
+
+  function wave(seed) {
+    let x = 0; for (const c of seed) x = (x * 31 + c.charCodeAt(0)) >>> 0;
+    const bars = [];
+    for (let i = 0; i < 28; i++) { x = (x * 1103515245 + 12345) >>> 0; bars.push(h('span', { style: `--h:${25 + (x % 76)};--i:${i}` })); }
+    return h('div', { class: 'wave', 'aria-hidden': 'true' }, bars);
+  }
+
+  function buildHome() {
+    S.slug = null;
+    const chips = Object.keys(MOODS).map((m) => h('button', {
+      class: 'chip', type: 'button', 'aria-pressed': String(S.moods.has(m)),
+      onclick: (e) => {
+        if (S.moods.has(m)) S.moods.delete(m); else S.moods.add(m);
+        e.currentTarget.setAttribute('aria-pressed', String(S.moods.has(m)));
+      },
+    }, MOODS[m]));
+    const ta = h('textarea', { id: 'feel', maxlength: '300', placeholder: 'Ej: Terminé un examen difícil y quiero algo para celebrar. Me gusta el rock en español.' });
+    ta.value = S.text;
+    ta.addEventListener('input', () => { S.text = ta.value; });
+    ui.go = h('button', { class: 'btn', type: 'button', onclick: runRecommend }, 'Recomendarme canciones');
+    ui.results = h('div');
+    ui.trend = h('div');
+    view.replaceChildren(
+      h('section', { class: 'hero' },
+        h('h1', {}, 'Descubrí una canción y ', h('em', {}, 'entrá a la charla.')),
+        h('p', {}, 'Contanos cómo te sentís. Claude elige las canciones y cada una abre su propio foro, creado en el momento, donde la comunidad analiza la letra y debate sobre el artista.')),
+      h('div', { class: 'picker' },
+        h('fieldset', {}, h('legend', {}, '¿Cómo te sentís?'), h('div', { class: 'chips' }, chips)),
+        h('div', {}, h('label', { class: 'lbl', for: 'feel' }, 'O contalo con tus palabras'), ta),
+        h('div', { class: 'row' }, ui.go, h('span', { class: 'hint', id: 'recmsg', role: 'status' }))),
+      ui.results,
+      h('div', { class: 'section-title' }, h('h2', {}, 'Foros activos')),
+      ui.trend);
+    renderResults(); renderTrend();
+  }
+
+  async function runRecommend() {
+    if (S.loading) return;
+    S.loading = true; ui.go.disabled = true;
+    const msg = $('#recmsg'); msg.textContent = 'Buscando canciones…';
+    const moods = [...S.moods], text = S.text.trim();
+    let recs = null, source = '';
+    if (S.sample) {
+      try { recs = await recommendAI(moods, text); source = 'Elegidas por Claude'; }
+      catch (e) { source = 'Elegidas con el motor local (Claude no respondió)'; }
+    } else source = 'Elegidas con el motor local';
+    if (!recs) recs = recommendLocal(moods, text);
+    S.recs = recs; S.recSource = source; S.loading = false;
+    if (ui.go) ui.go.disabled = false;
+    msg.textContent = '';
+    renderResults();
+    ui.results && ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderResults() {
+    if (!ui.results) return;
+    if (!S.recs) { ui.results.replaceChildren(); return; }
+    const cards = S.recs.map((r) => {
+      const slug = slugify(r.artist, r.title); S.tracks[slug] = r;
+      const st = statsOf(slug);
+      return h('button', { class: 'card', type: 'button', onclick: () => openFromCard(r) },
+        wave(slug),
+        h('h3', {}, r.title),
+        h('div', { class: 'by' }, [r.artist, r.genre].filter(Boolean).join(' · ')),
+        h('div', { class: 'tags' }, (r.moods || []).map((m) => h('span', { class: 'tag' }, moodName(m)))),
+        r.reason && h('div', { class: 'why' }, r.reason),
+        h('div', { class: 'foot' },
+          h('span', { class: 'stat' }, st.exists ? `${st.threads} hilos · ${st.messages} mensajes` : 'Foro nuevo: se crea al entrar'),
+          h('span', { class: 'go' }, 'Entrar al foro →')));
+    });
+    ui.results.replaceChildren(
+      h('div', { class: 'section-title' }, h('h2', {}, 'Para vos'), h('span', { class: 'source' }, S.recSource)),
+      h('div', { class: 'grid' }, cards));
+  }
+
+  function renderTrend() {
+    if (!ui.trend) return;
+    const rows = Object.keys(S.forums).map((slug) => {
+      const st = statsOf(slug);
+      const last = Math.max(S.forums[slug].createdAt || 0, ...S.posts.filter((p) => p.trackId === slug).map((p) => p.createdAt), ...S.threads.filter((x) => x.trackId === slug).map((x) => x.createdAt));
+      return { slug, st, last };
+    }).sort((a, b) => b.st.messages - a.st.messages || b.last - a.last).slice(0, 5);
+    if (!rows.length) { ui.trend.replaceChildren(h('div', { class: 'empty' }, 'Todavía no hay foros. Pedí una recomendación y entrá a una canción para abrir el primero.')); return; }
+    ui.trend.className = 'trend';
+    ui.trend.replaceChildren(...rows.map(({ slug, st, last }) => h('button', { type: 'button', onclick: () => { location.hash = 'foro-' + slug; } },
+      h('span', {}, h('b', {}, S.forums[slug].title), h('br'), h('small', {}, S.forums[slug].artist)),
+      h('small', {}, `${st.threads} hilos · ${st.messages} mensajes · ${ago(last)}`))));
+  }
+
+  async function openFromCard(track) {
+    const slug = await ensureForum(track);
+    location.hash = 'foro-' + slug;
+  }
+
+  /* ---------- Portada y reproductor (iTunes Search, JSONP: sin claves ni cuentas) ---------- */
+  function jsonp(url, ms) {
+    return new Promise((resolve, reject) => {
+      const cb = '__sf' + Math.random().toString(36).slice(2);
+      const sc = document.createElement('script');
+      const done = (fn, v) => { clearTimeout(tm); delete window[cb]; sc.remove(); fn(v); };
+      const tm = setTimeout(() => done(reject, new Error('timeout')), ms || 7000);
+      window[cb] = (data) => done(resolve, data);
+      sc.onerror = () => done(reject, new Error('blocked'));
+      sc.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+      document.head.append(sc);
+    });
+  }
+  async function fetchMedia(t) {
+    const q = encodeURIComponent(`${t.artist} ${t.title}`);
+    const data = await jsonp(`https://itunes.apple.com/search?term=${q}&media=music&entity=song&limit=8`);
+    const rows = (data && data.results || []).filter((r) => r.previewUrl);
+    const nt = norm(t.title), na = norm(t.artist.split(/[&,]/)[0]);
+    const best = rows.find((r) => norm(r.trackName).includes(nt) && norm(r.artistName).includes(na))
+      || rows.find((r) => norm(r.trackName).includes(nt)) || null;
+    if (!best) return { state: 'none' };
+    return { state: 'ok', preview: best.previewUrl, cover: String(best.artworkUrl100 || '').replace('100x100', '600x600'),
+      link: best.trackViewUrl, name: best.trackName, artist: best.artistName };
+  }
+  function renderPlayer(slug) {
+    if (!ui.aside || S.slug !== slug) return;
+    const t = trackOf(slug), m = S.media[slug];
+    const cover = h('div', { class: 'cover', 'aria-hidden': m && m.state === 'ok' ? null : 'true' }, m && m.state === 'ok' && m.cover ? h('img', { src: m.cover, alt: `Portada de ${t.title}` }) : (t.title || '♪').trim().charAt(0).toUpperCase());
+    const kids = [cover, h('div', {}, h('div', { class: 'tt' }, t.title), h('div', { class: 'sm' }, t.artist))];
+    if (!m || m.state === 'loading') kids.push(h('div', { class: 'sm', role: 'status' }, 'Buscando la canción…'));
+    else if (m.state === 'ok') {
+      const au = h('audio', { controls: true, preload: 'auto', src: m.preview, 'aria-label': `Reproductor de ${t.title}` });
+      au.addEventListener('error', () => { S.media[slug] = { state: 'blocked' }; renderPlayer(slug); });
+      kids.push(au, h('div', { class: 'sm' }, 'Fragmento de 30 s vía iTunes.'), m.link && h('a', { class: 'ext', href: m.link, target: '_blank', rel: 'noopener' }, 'Escuchar completa en Apple Music ↗'));
+      au.play().catch(() => {});
+    } else if (m.state === 'none') kids.push(h('div', { class: 'sm' }, 'No encontramos un fragmento de esta canción.'));
+    else kids.push(h('div', { class: 'notice' }, 'Este entorno bloquea el acceso a la música. El reproductor funciona al abrir la app desde el archivo local (index.html).'));
+    ui.aside.replaceChildren(h('div', { class: 'player' }, kids));
+  }
+  async function loadPlayer(slug) {
+    renderPlayer(slug);
+    if (S.media[slug]) return;
+    S.media[slug] = { state: 'loading' }; renderPlayer(slug);
+    try { S.media[slug] = await fetchMedia(trackOf(slug)); }
+    catch (_) { S.media[slug] = { state: 'blocked' }; }
+    renderPlayer(slug);
+  }
+
+  /* ---------- Foro ---------- */
+  function buildForum(slug) {
+    S.slug = slug; S.cat = 'todo'; S.threadId = null;
+    const t = trackOf(slug);
+    const st = statsOf(slug);
+    ui.notice = h('div', { role: 'status', hidden: true });
+    ui.stat = h('div', { class: 'meta' });
+    ui.cats = h('div', { class: 'cats', role: 'group', 'aria-label': 'Filtrar hilos' });
+    ui.list = h('div', { class: 'threads' });
+    ui.detail = h('div', { class: 'panel' });
+    ui.newBox = h('div');
+    ui.aside = h('aside', { 'aria-label': 'Reproductor' });
+    view.replaceChildren(
+      h('a', { class: 'back', href: '#inicio' }, '← Volver a las recomendaciones'),
+      h('div', { class: 'forum' }, h('div', { class: 'main' },
+      h('header', { class: 'fhead' },
+        h('div', { class: 'eyebrow' }, 'Foro de la canción'),
+        h('h1', {}, t.title),
+        h('div', { class: 'by' }, [t.artist, t.genre].filter(Boolean).join(' · ')),
+        h('div', { class: 'tags' }, (t.moods || []).map((m) => h('span', { class: 'tag' }, moodName(m)))),
+        ui.stat),
+      ui.notice,
+      h('div', { class: 'room' },
+        h('div', {}, ui.cats, ui.newBox, ui.list),
+        ui.detail)), ui.aside));
+    buildNewThread(); renderCats(); renderForum(); paintNotice(); loadPlayer(slug);
+  }
+
+  function buildNewThread() {
+    const open = h('button', { class: 'btn small', type: 'button' }, 'Abrir un hilo nuevo');
+    const sel = h('select', { id: 'nt-cat' }, Object.entries(CATS).map(([k, v]) => h('option', { value: k }, v)));
+    const title = h('input', { type: 'text', id: 'nt-title', maxlength: '120', placeholder: 'Título del hilo' });
+    const body = h('textarea', { id: 'nt-body', maxlength: '1500', placeholder: 'Tu opinión, análisis o pregunta' });
+    const send = h('button', { class: 'btn small', type: 'button' }, 'Publicar hilo');
+    const form = h('div', { class: 'compose', hidden: true },
+      h('label', { for: 'nt-cat' }, 'Categoría'), sel,
+      h('label', { for: 'nt-title' }, 'Título'), title,
+      h('label', { for: 'nt-body' }, 'Mensaje'), body,
+      h('div', { class: 'row' }, send, h('button', { class: 'btn ghost small', type: 'button', onclick: () => { form.hidden = true; open.hidden = false; } }, 'Cancelar')));
+    open.addEventListener('click', () => { form.hidden = false; open.hidden = true; title.focus(); });
+    send.addEventListener('click', async () => {
+      if (!S.canWrite) return paintNotice();
+      const ti = title.value.trim(), bo = body.value.trim();
+      if (ti.length < 3 || !bo) { S.notice = 'Escribí un título de al menos 3 letras y un mensaje.'; return paintNotice(); }
+      send.disabled = true;
+      const id = await addThread(S.slug, sel.value, ti, bo);
+      send.disabled = false;
+      if (id) { title.value = ''; body.value = ''; form.hidden = true; open.hidden = false; S.cat = 'todo'; renderCats(); selectThread(id); }
+    });
+    open.disabled = !S.canWrite;
+    ui.newBox.replaceChildren(open, form);
+    ui.openBtn = open;
+  }
+
+  function renderCats() {
+    ui.cats.replaceChildren(...[['todo', 'Todo'], ...Object.entries(CATS)].map(([k, v]) =>
+      h('button', { class: 'chip', type: 'button', 'aria-pressed': String(S.cat === k), onclick: () => { S.cat = k; renderCats(); renderList(); } }, v)));
+  }
+
+  async function renderForum() {
+    if (!S.slug) return;
+    const list = threadsOf(S.slug), st = statsOf(S.slug);
+    ui.stat.textContent = `${st.threads} hilos · ${st.messages} mensajes`;
+    if (ui.openBtn) ui.openBtn.disabled = !S.canWrite;
+    renderList(list); renderDetail();
+    const ids = [...S.threads.filter((x) => x.trackId === S.slug).map((x) => x.uid), ...S.posts.filter((p) => p.trackId === S.slug).map((p) => p.uid)];
+    if (await resolveNames(ids)) { if (S.slug) { renderList(); renderDetail(); } }
+  }
+
+  function renderList(list) {
+    list = list || threadsOf(S.slug);
+    const shown = list.filter((th) => S.cat === 'todo' || th.category === S.cat);
+    ui.list.replaceChildren(...(shown.length ? shown.map((th) => h('button', { class: 'thread', type: 'button', 'data-cat': th.category, 'aria-current': String(th.id === S.threadId), onclick: () => selectThread(th.id) },
+      h('b', {}, th.title),
+      h('small', {}, `${CATS[th.category] || 'Debate'} · ${who(th)} · ${th.replies} resp. · ${th.likes} me gusta`))) : [h('div', { class: 'empty' }, 'No hay hilos en esta categoría todavía.')]));
+  }
+
+  function selectThread(id) { S.threadId = id; ui.thread = null; renderList(); renderDetail(true); }
+
+  function renderDetail(scroll) {
+    const th = S.threadId && threadsOf(S.slug).find((x) => x.id === S.threadId);
+    if (!th) { ui.thread = null; ui.detail.replaceChildren(h('h2', {}, 'Elegí un hilo'), h('p', { class: 'hint' }, 'Leé lo que dice la comunidad y sumá tu opinión sobre la canción.')); return; }
+    if (!ui.thread || ui.thread.id !== th.id) {
+      const ta = h('textarea', { id: 'reply', maxlength: '1500', placeholder: 'Escribí tu respuesta' });
+      const btn = h('button', { class: 'btn small', type: 'button' }, 'Responder');
+      btn.addEventListener('click', async () => {
+        const v = ta.value.trim();
+        if (!S.canWrite) return paintNotice();
+        if (!v) return;
+        btn.disabled = true; await addPost(S.slug, th.id, v); btn.disabled = false; ta.value = '';
+      });
+      ui.thread = { id: th.id, head: h('div'), posts: h('div', { class: 'posts' }), ta, btn };
+      ui.detail.replaceChildren(ui.thread.head, ui.thread.posts,
+        h('div', { class: 'form' }, h('label', { class: 'hint', for: 'reply' }, 'Tu respuesta'), ta, h('div', { class: 'row' }, btn)));
+      if (scroll && window.innerWidth <= 860) ui.detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    ui.thread.btn.disabled = !S.canWrite;
+    ui.thread.head.replaceChildren(
+      h('div', { class: 'meta' }, h('span', {}, CATS[th.category] || 'Debate'), '·', h('span', {}, who(th)), th.createdAt ? ['·', h('span', {}, ago(th.createdAt))] : null),
+      h('h2', {}, th.title), h('div', { class: 'body' }, th.body),
+      likeBtn(th.id, th.likes));
+    const posts = S.posts.filter((p) => p.threadId === th.id).sort((a, b) => a.createdAt - b.createdAt);
+    ui.thread.posts.replaceChildren(...(posts.length ? posts.map((p) => h('div', { class: 'post' },
+      h('div', { class: 'meta' }, h('b', {}, S.names[p.uid] || '…'), '·', h('span', {}, ago(p.createdAt))),
+      h('div', { class: 'body' }, p.body),
+      likeBtn(p.id, S.likes.filter((l) => l.targetId === p.id).length))) : [h('p', { class: 'hint' }, 'Todavía nadie respondió. Podés abrir la charla.')]));
+  }
+
+  function likeBtn(targetId, n) {
+    const mine = S.likes.some((l) => l.targetId === targetId && l.uid === S.myId);
+    return h('button', { class: 'like', type: 'button', 'aria-pressed': String(mine), disabled: !S.canWrite, onclick: () => toggleLike(S.slug, targetId) }, `Me gusta · ${n}`);
+  }
+
+  /* ----------------------------- Actualización y rutas ----------------------------- */
+  let raf = 0;
+  function refresh() {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      if (S.slug) { if (!trackOf(S.slug)) return route(); renderForum(); }
+      else { renderResults(); renderTrend(); }
+    });
+  }
+  function route() {
+    const hash = location.hash.slice(1);
+    if (hash.startsWith('foro-')) {
+      const slug = hash.slice(5);
+      if (trackOf(slug)) return buildForum(slug);
+      if (S.mode === 'wait') return view.replaceChildren(h('p', { class: 'hint' }, 'Abriendo el foro…'));
+    }
+    buildHome();
+  }
+  window.addEventListener('hashchange', route);
+
+  /* ----------------------------------- Arranque ----------------------------------- */
+  async function init() {
+    route();
+    const use = window.claude && window.claude.use ? window.claude.use.bind(window.claude) : null;
+    if (use) {
+      try { S.user = await use('user'); } catch (_) {}
+      try { S.db = await use('db'); } catch (_) {}
+      try { S.sample = await use('sample'); } catch (_) {}
+    }
+    if (S.user) {
+      try { const me = await S.user.me(); S.myId = me.id; if (me.name) { S.names[me.id] = me.name; } } catch (_) {}
+    }
+    if (S.db && S.myId) {
+      let cw = null;
+      try { cw = await S.user.can('data.write'); } catch (_) {}
+      S.canWrite = cw !== false;
+      let timer = setTimeout(() => { if (S.mode === 'wait') { S.mode = 'local'; paintMode(); route(); } }, 10000);
+      const sub = (name, apply) => S.db.collection(name).onSnapshot((snap) => {
+        apply(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        if (S.mode !== 'shared') { S.mode = 'shared'; clearTimeout(timer); paintMode(); }
+        const first = !S.ready; S.ready = true; if (first) route(); else refresh();
+      }, () => { clearTimeout(timer); if (S.mode !== 'shared') { S.mode = 'local'; paintMode(); } });
+      sub('forums', (rows) => { S.forums = Object.fromEntries(rows.map((r) => [r.id, r])); });
+      sub('threads', (rows) => { S.threads = rows; });
+      sub('posts', (rows) => { S.posts = rows; });
+      sub('likes', (rows) => { S.likes = rows; });
+      if (!S.db) S.canWrite = true;
+    } else {
+      S.db = null; S.mode = 'local'; S.myId = 'local'; S.names.local = 'Vos'; S.canWrite = true; S.ready = true;
+      paintMode(); route();
+    }
+    const meEl = $('#me');
+    if (S.myId && S.names[S.myId]) { meEl.textContent = S.names[S.myId]; meEl.hidden = false; }
+  }
+  init();
+})();
+</script>
+</body>
+</html>
