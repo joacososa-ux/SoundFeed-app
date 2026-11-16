@@ -12,7 +12,7 @@ export const firebaseConfig = {
 };
 
 // 2) Spotify (opcional): Client ID de developer.spotify.com/dashboard. Usa PKCE, sin secreto.
-export const spotifyClientId = '';
+export const spotifyClientId = '3e29998515964033bfa582f5ef047731';
 
 // 3) YouTube (opcional): clave de YouTube Data API v3, restringida a tu dominio de GitHub Pages.
-export const youtubeApiKey = '';
+export const youtubeApiKey = 'AIzaSyBE7DwvR-0P8zSBfTijrLtNuJB3BhLtsKw';
