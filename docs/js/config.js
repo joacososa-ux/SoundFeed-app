@@ -3,12 +3,12 @@
 
 // 1) Firebase: consola de Firebase > Configuración del proyecto > Tus apps > App web > "Config".
 export const firebaseConfig = {
-  apiKey: 'PEGAR_AQUI',
-  authDomain: 'PEGAR_AQUI',
-  projectId: 'PEGAR_AQUI',
-  storageBucket: 'PEGAR_AQUI',
-  messagingSenderId: 'PEGAR_AQUI',
-  appId: 'PEGAR_AQUI',
+  apiKey: 'AIzaSyAqhN4NHmfEig-yF44T4QE8ZP_C_0BuM9E',
+  authDomain: 'soundfeed-52ee5.firebaseapp.com',
+  projectId: 'soundfeed-52ee5',
+  storageBucket: 'soundfeed-52ee5.firebasestorage.app',
+  messagingSenderId: '827920206282',
+  appId: '1:827920206282:web:0b95f072d7354010646733',
 };
 
 // 2) Spotify (opcional): Client ID de developer.spotify.com/dashboard. Usa PKCE, sin secreto.
