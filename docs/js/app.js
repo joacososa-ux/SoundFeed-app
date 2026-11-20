@@ -1,6 +1,6 @@
-import * as store from './store.js';
-import * as music from './music.js';
-import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js';
+import * as store from './store.js?v=12';
+import * as music from './music.js?v=12';
+import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
 
 const CATS = { letra: 'Análisis de letra', debate: 'Debate', anecdotas: 'Anécdotas', similares: 'Si te gusta esto' };
 const $ = (s, el) => (el || document).querySelector(s);
