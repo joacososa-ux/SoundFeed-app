@@ -15,6 +15,89 @@ service cloud.firestore {
     function isPremium() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'premium'; }
     function badgeOk() { return !('premium' in request.resource.data) || (request.resource.data.premium == true && isPremium()); }
 
+    function step(f) {
+      return !(f in request.resource.data.diff(resource.data).affectedKeys())
+        || math.abs(request.resource.data[f] - resource.data.get(f, 0)) == 1;
+    }
+    function pic(v, max) { return v == null || (v is string && v.size() <= max); }
+
+    // Nombres de usuario y perfiles públicos.
+    match /usernames/{name} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && name.size() >= 3 && name.size() <= 30;
+      allow update, delete: if false;
+    }
+
+    match /profiles/{uid} {
+      allow read: if true;
+      allow create: if signedIn() && request.auth.uid == uid && text(request.resource.data.username, 30)
+        && request.resource.data.keys().hasOnly(['username', 'createdAt']);
+      allow update: if signedIn() && (
+        // la persona edita lo suyo (estado, miniatura, portada) y sus contadores de a uno
+        (request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['thumb', 'bannerIdx', 'status', 'following', 'threads'])
+          && pic(request.resource.data.get('thumb', null), 12000)
+          && request.resource.data.get('bannerIdx', 0) is int && request.resource.data.get('bannerIdx', 0) >= 0 && request.resource.data.get('bannerIdx', 0) < 6
+          && (!('status' in request.resource.data) || (request.resource.data.status.e is string && request.resource.data.status.e.size() <= 8 && request.resource.data.status.t is string && request.resource.data.status.t.size() <= 60))
+          && step('following') && step('threads'))
+        ||
+        // otra persona suma o resta un seguidor, solo junto con su documento de "follows"
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers'])
+          && step('followers')
+          && ((request.resource.data.get('followers', 0) > resource.data.get('followers', 0)
+                && !exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid))
+                && existsAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid)))
+              || (request.resource.data.get('followers', 0) < resource.data.get('followers', 0)
+                && exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid))
+                && !existsAfter(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + uid)))))
+      );
+      allow delete: if false;
+
+      // Foto y portada en tamaño completo (comprimidas en el navegador; los GIF livianos se guardan tal cual).
+      match /media/{id} {
+        allow read: if true;
+        allow write: if signedIn() && request.auth.uid == uid && id == 'main'
+          && request.resource.data.keys().hasOnly(['avatar', 'banner'])
+          && pic(request.resource.data.get('avatar', null), 330000)
+          && pic(request.resource.data.get('banner', null), 520000);
+      }
+
+      // Copia de los hilos propios y de los reposts, para armar el perfil sin buscar en todos los foros.
+      match /threads/{id} {
+        allow read: if true;
+        allow create: if signedIn() && request.auth.uid == uid
+          && id == request.resource.data.slug + '_' + request.resource.data.threadId
+          && existsAfter(/databases/$(database)/documents/forums/$(request.resource.data.slug)/threads/$(request.resource.data.threadId))
+          && text(request.resource.data.title, 120) && text(request.resource.data.body, 1500)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.keys().hasOnly(['slug', 'threadId', 'ftitle', 'fartist', 'category', 'title', 'body', 'createdAt']);
+        allow update, delete: if false;
+      }
+      match /reposts/{id} {
+        allow read: if true;
+        allow create: if signedIn() && request.auth.uid == uid
+          && id == request.resource.data.slug + '_' + request.resource.data.threadId
+          && exists(/databases/$(database)/documents/forums/$(request.resource.data.slug)/threads/$(request.resource.data.threadId))
+          && text(request.resource.data.title, 120) && request.resource.data.body is string && request.resource.data.body.size() <= 300
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.keys().hasOnly(['slug', 'threadId', 'ftitle', 'fartist', 'title', 'body', 'author', 'tuid', 'category', 'createdAt']);
+        allow delete: if signedIn() && request.auth.uid == uid;
+        allow update: if false;
+      }
+    }
+
+    // Seguir: un documento por relación, con id <quien sigue>_<a quién>.
+    match /follows/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string && request.resource.data.to != request.auth.uid
+        && id == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly(['from', 'to', 'createdAt']);
+      allow delete: if signedIn() && resource.data.from == request.auth.uid;
+      allow update: if false;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -66,6 +149,20 @@ service cloud.firestore {
           && badgeOk()
           && request.resource.data.keys().hasOnly(['threadId', 'body', 'uid', 'author', 'createdAt', 'premium']);
         allow update, delete: if false;
+      }
+
+      // Un repost por persona e hilo: el id es <hilo>_<uid>.
+      match /reposts/{id} {
+        allow read: if true;
+        allow create: if signedIn()
+          && request.resource.data.uid == request.auth.uid
+          && text(request.resource.data.threadId, 40)
+          && id == request.resource.data.threadId + '_' + request.auth.uid
+          && text(request.resource.data.name, 60)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.keys().hasOnly(['threadId', 'uid', 'name', 'createdAt']);
+        allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+        allow update: if false;
       }
 
       // Un "me gusta" por persona y elemento: el id del documento es <elemento>_<uid>.

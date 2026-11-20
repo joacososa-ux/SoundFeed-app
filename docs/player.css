@@ -1,0 +1,38 @@
+/* Reproductor flotante (prueba) */
+.sfp { position: fixed; z-index: 28; left: 50%; bottom: 98px; width: min(560px, calc(100vw - 24px)); transform: translate(-50%, 30px) scale(.96); opacity: 0; pointer-events: none; padding: 10px; border-radius: 24px; display: grid; gap: 8px; background: rgba(23, 18, 37, .94); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0, 0, 0, .5); transition: transform .6s var(--spring, cubic-bezier(.34, 1.56, .64, 1)), opacity .3s; }
+html.glass .sfp { background: linear-gradient(145deg, rgba(46, 36, 82, .8), rgba(18, 13, 34, .78)); -webkit-backdrop-filter: blur(22px) saturate(1.7); backdrop-filter: blur(22px) saturate(1.7); }
+.sfp.on { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.sfp-vid { display: none; justify-content: center; }
+.sfp.yt .sfp-vid { display: flex; }
+.sfp-vid iframe, .sfp-vid > div { width: 200px; height: 200px; border-radius: 16px; overflow: hidden; background: #000; }
+.sfp.open .sfp-vid iframe, .sfp.open .sfp-vid > div { width: min(100%, 320px); height: min(60vw, 320px); }
+.sfp-row { display: flex; align-items: center; gap: 8px; }
+.sfp-cover { flex: none; width: 46px; height: 46px; border-radius: 13px; overflow: hidden; display: grid; place-items: center; border: 0; background: linear-gradient(135deg, var(--violet), var(--pink)); color: #fff; font: 800 18px var(--font-display, Syne, sans-serif); cursor: pointer; }
+.sfp-cover img { width: 100%; height: 100%; object-fit: cover; }
+.sfp-info { flex: 1; min-width: 0; display: grid; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; padding: 0 4px; }
+.sfp-t { font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sfp-a { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sfp-b { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: none; border: 0; cursor: pointer; }
+.sfp-b svg { width: 22px; height: 22px; fill: #fff; stroke: none; }
+.sfp-b.x svg { fill: none; stroke: var(--muted); stroke-width: 2.2; stroke-linecap: round; width: 18px; height: 18px; }
+.sfp-b.pp { background: linear-gradient(135deg, var(--pink), var(--violet)); box-shadow: 0 8px 20px rgba(255, 61, 154, .35); }
+.sfp-b.pp .pa, .sfp.playing .sfp-b.pp .pl { display: none; }
+.sfp.playing .sfp-b.pp .pa { display: block; }
+.sfp-bar { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.sfp-range { flex: 1; height: 6px; -webkit-appearance: none; appearance: none; border-radius: 6px; background: linear-gradient(90deg, var(--cyan), var(--pink)) 0 / calc(var(--p, 0) * 100%) 100% no-repeat, rgba(255, 255, 255, .16); outline: none; }
+.sfp-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .5); }
+.sfp-range::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; }
+.sfp-note { margin: 0; color: var(--muted); font-size: 12.5px; text-align: center; }
+.sfp-q { display: none; gap: 4px; max-height: 190px; overflow: auto; }
+.sfp.open .sfp-q { display: grid; }
+.sfp-q[hidden] { display: none !important; }
+.sfp-q > b { font-size: 13px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; padding: 4px 6px; }
+.sfp-qi { display: grid; text-align: left; padding: 8px 10px; border-radius: 12px; background: none; border: 0; color: inherit; cursor: pointer; }
+.sfp-qi small { color: var(--muted); }
+.sfp-qi.now { background: rgba(43, 227, 242, .12); }
+.rc-play { position: absolute; right: 12px; top: 12px; z-index: 3; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; border: 0; cursor: pointer; background: linear-gradient(135deg, var(--pink), var(--violet)); box-shadow: 0 8px 20px rgba(255, 61, 154, .35); }
+.rc-play svg { width: 18px; height: 18px; fill: #fff; }
+body:has(.sfp.on) .wrap { padding-bottom: 150px; }
+@media (max-width: 760px) { .sfp { bottom: 80px; } }
+.card { position: relative; }
+.card .rc-txt { padding-right: 44px; }

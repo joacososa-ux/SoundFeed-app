@@ -1,13 +1,15 @@
-import * as store from './store.js?v=12';
+import * as store from './store.js?v=13';
 import * as music from './music.js?v=13';
 import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
 import * as fx from './fx.js?v=1';
+import { initProfile } from './profile.js?v=1';
+import * as Player from './player.js?v=1'; // player: prueba, se saca borrando estas líneas
 
 const CATS = { letra: 'Análisis de letra', debate: 'Debate', anecdotas: 'Anécdotas', similares: 'Si te gusta esto' };
 const $ = (s, el) => (el || document).querySelector(s);
 const view = $('#view');
 const S = { user: null, ready: false, guest: false, picked: new Set(), text: '', recs: null, recNote: '', ui: {},
-  slug: null, data: null, cat: 'todo', threadId: null, off: null, offRecent: null, notice: '', spotifyMsg: '', premium: false, favs: [], offPlan: null, offFavs: null };
+  slug: null, data: null, cat: 'todo', threadId: null, off: null, offRecent: null, notice: '', spotifyMsg: '', premium: false, favs: [], offPlan: null, offFavs: null, following: new Set(), me: null, offFol: null, offMe: null };
 const FREE_RECS = 3, PREMIUM_RECS = 9;
 const TODAY_NOTE = 'Según tu ánimo de hoy';
 const dayKey = () => new Date().toLocaleDateString('sv-SE');
@@ -40,6 +42,7 @@ const ICON = {
   star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
   out: '<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
+  repost: '<path d="M17 3l4 4-4 4"/><path d="M3 11V9a2 2 0 0 1 2-2h16"/><path d="M7 21l-4-4 4-4"/><path d="M21 13v2a2 2 0 0 1-2 2H3"/>',
 };
 function ico(name, cls) { const s = document.createElement('span'); s.className = 'ic' + (cls ? ' ' + cls : ''); s.setAttribute('aria-hidden', 'true'); s.innerHTML = '<svg viewBox="0 0 24 24">' + ICON[name] + '</svg>'; return s; }
 const ambEl = () => { const a = document.createElement('div'); a.className = 'amb'; a.setAttribute('aria-hidden', 'true'); a.innerHTML = '<i class="o a"></i><i class="o b"></i><i class="o c"></i>'; return a; };
@@ -56,9 +59,10 @@ const errMsg = (e) => (e && e.code === 'permission-denied' ? 'No tenés permiso 
 function setGuest(v) { S.guest = v; try { v ? sessionStorage.setItem('sf_guest', '1') : sessionStorage.removeItem('sf_guest'); } catch (_) {} }
 /* ---------- cuenta: avatar y menú ---------- */
 function avatarEl(u, size) {
-  const el = h('span', { class: 'av-pic', 'aria-hidden': 'true', vars: { '--s': (size || 34) + 'px', '--a': hue(u.uid || u.name) } });
+  const el = h('span', { class: 'av-pic', 'aria-hidden': 'true', 'data-uid': u.uid && !u.thumb && !u.photo ? u.uid : null, vars: { '--s': (size || 34) + 'px', '--a': hue(u.uid || u.name) } });
   el.append(h('b', {}, (u.name || '?').charAt(0).toUpperCase()));
-  if (u.photo) el.append(h('img', { src: u.photo, alt: '', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() }));
+  if (u.thumb) el.append(h('img', { src: u.thumb, alt: '' }));
+  else if (u.photo) el.append(h('img', { src: u.photo, alt: '', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() }));
   return el;
 }
 let MENU = null, SHEET = null;
@@ -70,12 +74,13 @@ function closeMenu() {
   const b = $('.acct'); if (b) b.setAttribute('aria-expanded', 'false');
 }
 function closeSheet(now) { if (!SHEET) return; if (now === true) SHEET.remove(); else leave(SHEET); SHEET = null; document.body.classList.remove('noscroll'); if (!MENU) document.removeEventListener('keydown', menuKey); }
+function meU() { return S.user ? { ...S.user, thumb: S.me && S.me.thumb ? S.me.thumb : null, photo: S.me && S.me.thumb ? null : S.user.photo } : null; }
 function openMenu() {
-  const u = S.user; if (!u) return;
+  const u = meU(); if (!u) return;
   const item = (label, sub, fn, icon, i) => h('button', { class: 'mi', type: 'button', role: 'menuitem', onclick: fn, vars: { '--i': i } }, ico(icon), h('span', {}, label), sub ? h('small', {}, sub) : '');
   const panel = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Tu cuenta' },
     h('div', { class: 'mhead' }, avatarEl(u, 44), h('div', {}, h('b', {}, '@' + u.name), h('small', {}, S.premium ? 'Plan Premium' : 'Plan gratuito'))),
-    item('Perfil', '', () => openSheet('perfil'), 'user', 0),
+    item('Mi perfil', '', () => { closeMenu(); location.hash = 'perfil-' + u.uid; }, 'user', 0),
     item('Cuenta', '', () => openSheet('cuenta'), 'card', 1),
     item('Plan', S.premium ? 'Premium' : 'Gratuito', () => openSheet('plan'), 'star', 2),
     h('div', { class: 'msep' }),
@@ -123,12 +128,21 @@ function openSheet(kind) {
         h('li', { class: S.premium ? '' : 'off' }, 'Insignia Premium')),
       S.premium ? '' : h('p', { class: 'snote' }, 'El plan Premium llega pronto.')];
   }
+  showSheet(title, body);
+}
+function showSheet(title, body) {
+  closeMenu(); closeSheet(true);
   const sheet = h('section', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('div', { class: 'sheet-head' }, h('h2', {}, title), h('button', { class: 'sheet-x', type: 'button', 'aria-label': 'Cerrar', onclick: () => closeSheet() }, '✕')),
     h('div', { class: 'sheet-body' }, body));
   SHEET = h('div', { class: 'menu-back sheet-back', onclick: (e) => { if (e.target === SHEET) closeSheet(); } }, sheet);
   document.body.classList.add('noscroll'); document.body.append(SHEET); document.addEventListener('keydown', menuKey);
   const x = sheet.querySelector('.sheet-x'); if (x) x.focus();
+}
+let TOAST = null, TT = 0;
+function toast(m) {
+  if (!TOAST) { TOAST = h('div', { class: 'sf-toast', role: 'status' }); document.body.append(TOAST); }
+  TOAST.textContent = m; TOAST.classList.add('on'); clearTimeout(TT); TT = setTimeout(() => TOAST.classList.remove('on'), 2600);
 }
 function paintAccount() {
   const box = $('#account'), u = S.user;
@@ -138,7 +152,7 @@ function paintAccount() {
     return;
   }
   box.replaceChildren(h('button', { class: 'acct', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': String(!!MENU), 'aria-label': 'Menú de ' + u.name, onclick: () => (MENU ? closeMenu() : openMenu()) },
-    avatarEl(u, 34), h('span', { class: 'burger', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
+    avatarEl(meU(), 34), h('span', { class: 'burger', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
     u.password && !u.verified ? h('em', { class: 'dot', title: 'Confirmá tu correo' }) : ''));
 }
 
@@ -433,8 +447,11 @@ function renderPlan() {
 }
 function watchAccount(uid) {
   if (S.offPlan) { S.offPlan(); S.offPlan = null; } if (S.offFavs) { S.offFavs(); S.offFavs = null; }
-  S.premium = false; S.favs = [];
+  if (S.offFol) { S.offFol(); S.offFol = null; } if (S.offMe) { S.offMe(); S.offMe = null; }
+  S.premium = false; S.favs = []; S.following = new Set(); S.me = null;
   if (!uid) return;
+  S.offFol = store.watchFollowing(uid, (set) => { S.following = set; PF.rerender(); });
+  S.offMe = store.watchProfile(uid, (p) => { S.me = p; paintAccount(); });
   S.offPlan = store.watchPlan(uid, (p) => { S.premium = p; renderPlan(); });
   S.offFavs = store.watchFavorites(uid, (f) => { S.favs = f; renderPlan(); });
 }
@@ -453,13 +470,21 @@ function renderResults(anim) {
   if (!S.recs || !S.recs.length) { box.replaceChildren(); return; }
   box.replaceChildren(
     h('div', { class: 'section-title' }, h('h2', {}, S.recNote === TODAY_NOTE ? 'Para tu ánimo hoy' : 'Para vos'), h('span', { class: 'source' }, S.recNote)),
-    h('div', { class: 'grid' }, S.recs.map((r) => h('button', { class: 'card', type: 'button', onclick: () => openTrack(r) },
+    h('div', { class: 'grid' }, S.recs.map((r, ri) => h('button', { class: 'card', type: 'button', onclick: () => openTrack(r) },
+      playBtn(r, ri), // player:
       h('div', { class: 'rc-top' }, coverBox(r), h('div', { class: 'rc-txt' }, h('h3', {}, r.title), h('div', { class: 'by' }, [r.artist, r.genre].filter(Boolean).join(' · ')))),
       wave(slugify(r.artist, r.title)),
       h('div', { class: 'tags' }, (r.moods || []).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
       r.reason && h('div', { class: 'why' }, r.reason),
       h('div', { class: 'foot' }, h('span', { class: 'stat' }, 'Foro de la canción'), h('span', { class: 'go' }, 'Entrar al foro →'))))));
   if (anim) fx.stagger(box, '.grid > *');
+}
+function playBtn(r, i) { // player:
+  const b = h('span', { class: 'rc-play', role: 'button', tabindex: '0', 'aria-label': 'Escuchar ' + r.title });
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+  const go = (e) => { e.stopPropagation(); e.preventDefault(); Player.playList(S.recs, i); };
+  b.addEventListener('click', go); b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(e); });
+  return b;
 }
 async function openTrack(r) {
   const slug = slugify(r.artist, r.title);
@@ -506,12 +531,13 @@ function buildForumShell() {
   buildNewThread(); renderCats(); loadPlayer(S.slug, t);
 }
 function setNotice(msg, err) { const n = S.ui.notice; if (!n) return; n.textContent = msg || ''; n.hidden = !msg; n.className = 'notice' + (err ? ' err' : ''); }
+const forumRepostable = (th) => ({ ...th, slug: S.slug, ftitle: S.data.forum.title, fartist: S.data.forum.artist });
 function threadsView() {
   const { forum, threads, posts, likes } = S.data;
   const all = [...seedThreads(forum, forum.createdAt), ...threads];
   return all.map((t) => {
     const ps = posts.filter((p) => p.threadId === t.id);
-    return { ...t, replies: ps.length, likes: likes.filter((l) => l.targetId === t.id).length,
+    return { ...t, replies: ps.length, likes: likes.filter((l) => l.targetId === t.id).length, reposters: (S.data.reposts || []).filter((r) => r.threadId === t.id).map((r) => r.uid),
       last: Math.max(t.createdAt, ...ps.map((p) => p.createdAt)) };
   }).sort((a, b) => b.last - a.last);
 }
@@ -536,7 +562,7 @@ function buildNewThread() {
     if (ti.length < 3 || !bo) return setNotice('Escribí un título de al menos 3 letras y un mensaje.', true);
     send.disabled = true;
     try {
-      const ref = await store.addThread(S.user, S.slug, sel.value, ti, bo, S.premium);
+      const ref = await store.addThread(S.user, S.slug, sel.value, ti, bo, S.premium, S.data.forum);
       title.value = ''; body.value = ''; form.hidden = true; open.hidden = false; setNotice(''); S.cat = 'todo'; renderCats(); S.threadId = ref.id; S.ui.thread = null; renderForum();
     } catch (e) { setNotice(errMsg(e), true); } finally { send.disabled = false; }
   });
@@ -577,11 +603,11 @@ function renderDetail(list) {
     ui.detail.replaceChildren(ui.thread.head, ui.thread.posts, h('div', { class: 'form' }, h('label', { class: 'hint', for: 'reply' }, 'Tu respuesta'), ta, h('div', { class: 'row' }, btn)));
   }
   ui.thread.head.replaceChildren(
-    h('div', { class: 'meta' }, h('span', {}, CATS[th.category] || 'Debate'), '·', h('span', {}, th.author), th.premium && h('span', { class: 'badge' }, 'Premium'), '·', h('span', {}, ago(th.createdAt))),
-    h('h2', {}, th.title), h('div', { class: 'body' }, th.body), likeBtn(th.id));
+    h('div', { class: 'meta' }, h('span', {}, CATS[th.category] || 'Debate'), '·', authorLink(th.uid, th.author, 'plain'), th.premium && h('span', { class: 'badge' }, 'Premium'), '·', h('span', {}, ago(th.createdAt))),
+    h('h2', {}, th.title), h('div', { class: 'body' }, th.body), h('div', { class: 'acts' }, likeBtn(th.id), repostBtn(forumRepostable(th))));
   const posts = S.data.posts.filter((p) => p.threadId === th.id);
   ui.thread.posts.replaceChildren(...(posts.length ? posts.map((p) => h('div', { class: 'post' },
-    h('div', { class: 'meta' }, h('b', {}, p.author), p.premium && h('span', { class: 'badge' }, 'Premium'), '·', h('span', {}, ago(p.createdAt))), h('div', { class: 'body' }, p.body), likeBtn(p.id)))
+    h('div', { class: 'meta' }, authorLink(p.uid, p.author), p.premium && h('span', { class: 'badge' }, 'Premium'), '·', h('span', {}, ago(p.createdAt))), h('div', { class: 'body' }, p.body), likeBtn(p.id)))
     : [h('p', { class: 'hint' }, 'Todavía nadie respondió. Podés abrir la charla.')]));
 }
 
@@ -608,12 +634,12 @@ window.addEventListener('resize', () => fitNames(document)); async function load
     kids.push(h('iframe', { src: `https://open.spotify.com/embed/track/${p.spotifyId}?utm_source=generator&theme=0`, height: '152', title: 'Reproductor de Spotify', allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture', loading: 'lazy' }),
       h('div', { class: 'sm' }, p.premium ? 'Spotify Premium: canción completa.' : 'Cuenta gratuita de Spotify: puede sonar solo un fragmento.'));
   } else if (p.kind === 'youtube' && /^[\w-]{11}$/.test(p.youtubeId)) {
-    kids.push(h('iframe', { class: 'yt', src: `https://www.youtube-nocookie.com/embed/${p.youtubeId}?autoplay=1&rel=0`, title: 'Reproductor de YouTube', allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen' }),
+    kids.push(h('iframe', { class: 'yt', src: `https://www.youtube-nocookie.com/embed/${p.youtubeId}?autoplay=${Player.active() ? 0 : 1}&rel=0`, title: 'Reproductor de YouTube', allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen' }),
       h('div', { class: 'sm' }, 'Reproducción completa con YouTube.'));
   } else if (p.kind === 'preview' && p.preview) {
     const au = h('audio', { controls: true, preload: 'auto', src: p.preview, 'aria-label': `Fragmento de ${t.title}` });
     kids.push(au, h('div', { class: 'sm' }, 'Fragmento de 30 s.' + (music.spotifyAvailable() && !music.spotifyConnected() ? ' Conectá Spotify para escucharla completa.' : '')));
-    au.play().catch(() => {});
+    if (!Player.active()) au.play().catch(() => {});
   } else kids.push(h('div', { class: 'sm' }, 'No encontramos una muestra de esta canción.'));
   if (p.link) kids.push(h('a', { class: 'ext', href: p.link, target: '_blank', rel: 'noopener noreferrer' }, 'Escuchar en Apple Music ↗'));
   paint(kids);
@@ -628,7 +654,7 @@ const NAV_ORDER = ['foros', 'inicio', 'favoritos'];
 const NAV_ICON = { foros: '<svg class="ic" viewBox="0 0 32 32" aria-hidden="true"><path class="ln" d="M5 7.5A3.5 3.5 0 0 1 8.5 4h15A3.5 3.5 0 0 1 27 7.5v9a3.5 3.5 0 0 1-3.5 3.5H15l-5.2 4.4a.6.6 0 0 1-1-.46V20h-.3A3.5 3.5 0 0 1 5 16.5z"/><circle class="dot" cx="11" cy="12" r="1.5"/><circle class="dot" cx="16" cy="12" r="1.5"/><circle class="dot" cx="21" cy="12" r="1.5"/><path class="ln" d="M21 23.2h2.2l3.6 3.1V23.2H27a3 3 0 0 0 3-3v-5" opacity=".55"/></svg>', inicio: '<svg class="ic lupa" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="mrim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eafcff"/><stop offset=".3" stop-color="#2be3f2"/><stop offset=".68" stop-color="#7c5cff"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient><linearGradient id="mhan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7f70b8"/><stop offset=".45" stop-color="#cbbff5"/><stop offset="1" stop-color="#2f2552"/></linearGradient><linearGradient id="mcol" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5f1ff"/><stop offset=".5" stop-color="#9a8bd6"/><stop offset="1" stop-color="#3a2f66"/></linearGradient><radialGradient id="mgl" cx=".32" cy=".28" r=".95"><stop offset="0" stop-color="#d6fbff" stop-opacity=".6"/><stop offset=".55" stop-color="#5aa8ff" stop-opacity=".16"/><stop offset="1" stop-color="#7c5cff" stop-opacity=".26"/></radialGradient><clipPath id="mclip"><circle cx="26" cy="26" r="15.2"/></clipPath></defs><ellipse cx="33" cy="58" rx="17" ry="2.6" fill="#000" opacity=".28"/><g transform="rotate(45 26 26)"><rect x="43.5" y="21.5" width="7" height="13" rx="2.2" transform="translate(0 -1.5)" fill="url(#mcol)"/><rect x="49.5" y="23" width="14" height="10" rx="4.5" transform="translate(-1 -1)" fill="url(#mhan)"/><g stroke="#1d1538" stroke-width="1.1" opacity=".55" stroke-linecap="round"><path d="M54 24.2v7.6M57 24.2v7.6M60 24.2v7.6"/></g><path d="M51 24.4h10" stroke="#fff" stroke-opacity=".5" stroke-width="1.2" stroke-linecap="round"/></g><circle cx="26" cy="26" r="15.2" fill="url(#mgl)"/><g clip-path="url(#mclip)"><g transform="rotate(24 26 26)"><rect class="sweep" x="-6" y="0" width="9" height="56" fill="#fff" opacity=".55"/></g></g><circle cx="26" cy="26" r="18" fill="none" stroke="url(#mrim)" stroke-width="4.6"/><circle cx="26" cy="26" r="15.2" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width=".9"/><circle cx="26" cy="26" r="20.4" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width=".8"/><path d="M14.2 22.6A12.6 12.6 0 0 1 22 14.3" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="2.4" stroke-linecap="round"/><circle cx="17.6" cy="17.2" r="1.3" fill="#fff"/><path d="M36.4 33.6a12.6 12.6 0 0 1-3.2 3.7" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="2" stroke-linecap="round"/></svg>', favoritos: '<svg class="ic" viewBox="0 0 32 32" aria-hidden="true"><path class="ln heart-s" d="M16 27.2S4.5 20.4 4.5 12.2A6.2 6.2 0 0 1 16 8.9a6.2 6.2 0 0 1 11.5 3.3C27.5 20.4 16 27.2 16 27.2z"/></svg>' };
 const NAV_LABEL = { foros: 'Foros', inicio: 'Descubrir', favoritos: 'Favoritos' };
 function paintNav(hash) {
-  const cur = hash === 'foros' || /^foro-/.test(hash) ? 'foros' : hash === 'favoritos' ? 'favoritos' : 'inicio';
+  const cur = hash === 'foros' || /^foro-/.test(hash) || /^perfil-/.test(hash) ? 'foros' : hash === 'favoritos' ? 'favoritos' : 'inicio';
   const nav = $('#nav'), i = NAV_ORDER.indexOf(cur);
   if (!nav.querySelector('.bub')) {
     nav.style.setProperty('--i', i); nav.dataset.i = String(i);
@@ -644,14 +670,17 @@ function paintNav(hash) {
 }
 function tweet(t) {
   const same = !t.body || t.body.indexOf(t.title) === 0;
+  const av = h('span', { class: 'av-pic', 'aria-hidden': 'true', 'data-uid': t.uid || null, vars: { '--s': '44px', '--a': hue(t.uid || t.author) } }, h('b', {}, (t.author || '?').charAt(0).toUpperCase()));
   return h('article', { class: 'tw' },
-    h('span', { class: 'av', 'aria-hidden': 'true' }, (t.author || '?').charAt(0).toUpperCase()),
+    t.uid ? h('a', { class: 'tw-av', href: '#perfil-' + t.uid, 'aria-label': 'Perfil de ' + t.author }, av) : av,
     h('div', { class: 'tw-main' },
-      h('div', { class: 'tw-head' }, h('b', {}, t.author || 'Oyente'), t.premium && h('span', { class: 'badge' }, 'Premium'),
+      t.repostBy && h('div', { class: 'tw-rp' }, ico('repost'), t.repostUid === (S.user && S.user.uid) ? 'Reposteaste' : [h('a', { href: '#perfil-' + t.repostUid }, t.repostBy), ' reposteó']),
+      h('div', { class: 'tw-head' }, authorLink(t.uid, t.author), t.premium && h('span', { class: 'badge' }, 'Premium'),
         h('a', { class: 'songchip', href: '#foro-' + t.slug, title: 'Ir al foro de ' + t.ftitle }, '♪ ' + t.ftitle, h('span', {}, ' · ' + t.fartist)),
         h('span', { class: 'when' }, ago(t.createdAt))),
       h('div', { class: 'tw-body' }, same ? (t.body || t.title) : [h('b', { class: 'tw-title' }, t.title), h('br'), t.body]),
-      h('div', { class: 'tags' }, h('span', { class: 'tag' }, CATS[t.category] || 'Debate'), (t.fmoods || []).slice(0, 2).map((m) => h('span', { class: 'tag' }, moodLabel(m))))));
+      h('div', { class: 'tags' }, h('span', { class: 'tag' }, CATS[t.category] || 'Debate'), (t.fmoods || []).slice(0, 2).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
+      h('div', { class: 'tw-acts' }, repostBtn(t))));
 }
 function renderFeed() {
   const ui = S.ui; if (!ui || !ui.feed) return;
@@ -662,6 +691,7 @@ function renderFeed() {
   if (F.tab === 'mias') { const own = new Set(S.favs.map((f) => f.slug)); list = list.filter((t) => own.has(t.slug) || (S.user && t.uid === S.user.uid)); }
   ui.feed.replaceChildren(...(note ? [h('div', { class: 'empty' }, note)] : list.length ? list.map(tweet)
     : [h('div', { class: 'empty' }, F.ready ? 'Todavía no hay hilos acá. Elegí una canción y abrí la charla.' : 'Cargando hilos…')]));
+  PF.fillAvatars(ui.feed);
   ui.side.replaceChildren(...(F.forums.length ? F.forums.slice(0, 6).map((f) => h('a', { class: 'sidesong', href: '#foro-' + f.slug }, h('b', {}, f.title), h('small', {}, f.artist)))
     : [h('span', { class: 'hint' }, 'Sin foros todavía.')]));
   ui.quick.replaceChildren(...F.forums.slice(0, 6).map((f) => h('button', { class: 'sr-item', type: 'button',
@@ -701,7 +731,7 @@ function buildFeed() {
     try {
       const s = F.song;
       await store.ensureForum(S.user, { slug: s.slug, title: s.title.slice(0, 80), artist: s.artist.slice(0, 60), genre: (s.genre || '').slice(0, 40), moods: (s.moods || []).slice(0, 4) });
-      await store.addThread(S.user, s.slug, 'debate', text.split('\n')[0].slice(0, 120), text, S.premium);
+      await store.addThread(S.user, s.slug, 'debate', text.split('\n')[0].slice(0, 120), text, S.premium, { title: s.title, artist: s.artist });
       ta.value = ''; setSong(null);
     } catch (e) { msg.textContent = errMsg(e); } finally { send.disabled = !S.user; }
   });
@@ -914,18 +944,40 @@ function openSplash() {
   if (!reduce) { rot = -80; render(); setTimeout(() => { if (ov.isConnected && !drag) tween(0, 1500); }, 250); }
 }
 
+/* ---------- perfiles ---------- */
+Player.init({ music, h, toast }); // player:
+const PF = initProfile({ h, S, fx, ico, hue, ago, errMsg, showSheet, closeSheet, view, avatarEl, toast, onMeSaved: () => PF.invalidate(S.user.uid) });
+function authorLink(uid, name, cls) { return uid ? h('a', { class: 'author' + (cls ? ' ' + cls : ''), href: '#perfil-' + uid }, name || 'Oyente') : h(cls === 'plain' ? 'span' : 'b', {}, name || 'Oyente'); }
+// Botón de repost: un repost por persona e hilo.
+function repostBtn(t, after) {
+  const mine = !!S.user && (t.reposters || []).includes(S.user.uid), n = (t.reposters || []).length;
+  const ic = ico('repost'), c = h('span', {}, String(n));
+  const b = h('button', { class: 'act rep', type: 'button', 'aria-pressed': String(mine), 'aria-label': mine ? 'Quitar repost' : 'Repostear', disabled: !S.user, title: S.user ? null : 'Iniciá sesión para repostear' }, ic, c);
+  b.addEventListener('click', async () => {
+    if (!t.slug || !t.uid) return;
+    const now = b.getAttribute('aria-pressed') !== 'true'; b.disabled = true; b.setAttribute('aria-pressed', String(now)); c.textContent = String(Math.max(0, +c.textContent + (now ? 1 : -1)));
+    ic.classList.remove('spin'); void ic.offsetWidth; ic.classList.add('spin'); if (now) fx.burst(ic);
+    try { await store.setRepost(S.user, t, now); if (after) after(now); toast(now ? 'Reposteaste este hilo' : 'Quitaste tu repost'); }
+    catch (e) { b.setAttribute('aria-pressed', String(!now)); c.textContent = String(n); toast(errMsg(e)); } finally { b.disabled = !S.user; }
+  });
+  if (!t.uid) b.hidden = true;
+  return b;
+}
+
 /* ---------- rutas y arranque ---------- */
 let ROUTE_KEY = null;
+const PERFIL = /^perfil-[A-Za-z0-9]{6,40}$/;
 function build(hash) {
   if (hash === 'foros') return buildFeed();
   if (hash === 'favoritos') return buildFavs();
   if (/^foro-[a-z0-9-]{1,80}$/.test(hash)) { const slug = hash.slice(5); if (S.slug !== slug || !S.data) buildForum(slug); return; }
+  if (PERFIL.test(hash)) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } S.ui = {}; return PF.build(hash.slice(7)); }
   buildHome();
 }
 function swapMode(prev, key) {
   const a = NAV_ORDER.indexOf(prev), b = NAV_ORDER.indexOf(key);
   if (a >= 0 && b >= 0) return b > a ? 1 : -1;
-  return /^foro-/.test(key) ? 'push' : 'pop';
+  return /^(foro|perfil)-/.test(key) ? 'push' : 'pop';
 }
 function route() {
   paintAccount();
@@ -934,7 +986,7 @@ function route() {
   if (!S.user && !S.guest) { ROUTE_KEY = null; leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('welcome'); }
   closeAuth();
   const hash = location.hash.slice(1); paintNav(hash); if (S.today.pending) openSplash();
-  const key = /^foro-[a-z0-9-]{1,80}$/.test(hash) ? hash : NAV_ORDER.includes(hash) ? hash : 'inicio';
+  const key = /^foro-[a-z0-9-]{1,80}$/.test(hash) || PERFIL.test(hash) ? hash : NAV_ORDER.includes(hash) ? hash : 'inicio';
   const prev = ROUTE_KEY, changed = prev !== null && key !== prev; ROUTE_KEY = key;
   const g = changed ? fx.ghost(view) : null;
   build(hash);

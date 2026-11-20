@@ -30,6 +30,11 @@ Con la extensión **Live Server** de VS Code abrí `docs/index.html` (queda en `
 2. **Credenciales → Crear credencial → Clave de API**, y en *Restricciones de la aplicación* elegí **Sitios web** con `https://TU-USUARIO.github.io/*`. Restringila a esa API.
 3. Pegala en `youtubeApiKey`. La cuota gratuita alcanza para unos cientos de búsquedas por día.
 
+## 6. Perfiles, seguidores, reposts y reproductor
+- Cada vez que cambie `firestore.rules`, copiá todo el archivo en Firestore → **Reglas** y **Publicar**. Los perfiles, seguir y repostear no funcionan hasta que lo hagas.
+- Foto y portada se guardan en Firestore ya comprimidas (los GIF livianos, de hasta ~240 KB la foto y ~380 KB la portada, se guardan animados). No se usa Firebase Storage.
+- El reproductor flotante (`js/player.js`, `player.css`) es una prueba: para sacarlo, borrá esos dos archivos, su `<link>` en `index.html` y las líneas marcadas `player:` en `js/app.js`.
+
 ## Cómo funciona
 - Visitas: leen foros y oyen fragmentos de 30 s (iTunes). Con Google: abren foros, publican y dan me gusta.
 - Los hilos iniciales de cada foro se generan en el navegador (no se guardan); lo que escribe la gente va a Firestore.
@@ -44,5 +49,7 @@ js/music.js             portada y reproducción (iTunes, YouTube, Spotify)
 js/recommend.js         recomendador por ánimo y hilos iniciales
 js/catalog.js           catálogo base
 js/app.js               pantallas
+js/profile.js           perfiles, seguidores y edición de imágenes
+js/player.js            reproductor flotante (prueba)
 firestore.rules         reglas de seguridad
 ```
