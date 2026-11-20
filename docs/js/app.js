@@ -300,9 +300,9 @@ function fitNames(root) {
     if (d > 2) { el.style.setProperty('--d', d + 'px'); el.style.setProperty('--t', Math.max(6, d / 20 + 4) + 's'); }
   });
 }
-async function loadPlayer(slug, t) {
+window.addEventListener('resize', () => fitNames(document)); async function loadPlayer(slug, t) {
   const aside = S.ui.aside;
-  const paint = (kids) => { if (S.slug === slug && S.ui.aside === aside) { aside.replaceChildren(h('div', { class: 'player' }, kids)); requestAnimationFrame(() => fitNames(aside)); } };
+  const paint = (kids) => { if (S.slug === slug && S.ui.aside === aside) { aside.replaceChildren(h('div', { class: 'player' }, kids)); requestAnimationFrame(() => fitNames(aside)); if (document.fonts) document.fonts.ready.then(() => fitNames(aside)); } };
   const head = (cover) => [h('div', { class: 'cover' }, cover ? h('img', { src: cover, alt: `Portada de ${t.title}`, referrerpolicy: 'no-referrer' }) : t.title.trim().charAt(0).toUpperCase()),
     h('div', { class: 'names' }, h('div', { class: 'tt mq' }, h('span', {}, t.title)), h('div', { class: 'sm mq' }, h('span', {}, t.artist)))];
   paint([...head(null), h('div', { class: 'sm', role: 'status' }, 'Buscando la canción…')]);
