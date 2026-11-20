@@ -63,16 +63,25 @@ export function coverFor(title, artist) {
   const p = (covLanes[i] = covLanes[i].then(job, job)); p.finally(() => covPending.delete(key));
   covPending.set(key, p); return p;
 }
+const itRows = (data) => (data.results || []).map((r) => ({
+  title: r.trackName, artist: r.artistName, genre: r.primaryGenreName || '',
+  preview: r.previewUrl || null, cover: String(r.artworkUrl100 || '').replace('100x100', '600x600') || null, link: r.trackViewUrl || null,
+}));
+async function itunesOne(term, limit, extra) {
+  const q = new URLSearchParams({ term, media: 'music', entity: 'song', limit: String(limit), ...extra });
+  const url = 'https://itunes.apple.com/search?' + q;
+  return itRows(await firstOk([getJson(url, 5000), jsonp(url, 6000)]));
+}
+// Busca en la tienda general, en la de Argentina y por nombre de artista, para que aparezcan también los artistas locales.
 export async function itunesSearch(term, limit = 8) {
   const key = 'it:' + term + limit;
   if (cache.has(key)) return cache.get(key);
-  const q = new URLSearchParams({ term, media: 'music', entity: 'song', limit: String(limit) });
-  const url = 'https://itunes.apple.com/search?' + q;
-  let data; data = await firstOk([getJson(url, 5000), jsonp(url, 6000)]);
-  const rows = (data.results || []).map((r) => ({
-    title: r.trackName, artist: r.artistName, genre: r.primaryGenreName || '',
-    preview: r.previewUrl || null, cover: String(r.artworkUrl100 || '').replace('100x100', '600x600') || null, link: r.trackViewUrl || null,
-  }));
+  const jobs = [itunesOne(term, limit, {}), itunesOne(term, limit, { country: 'AR' }), itunesOne(term, limit, { country: 'AR', attribute: 'artistTerm' })];
+  const res = await Promise.allSettled(jobs);
+  if (res.every((r) => r.status === 'rejected')) throw res[0].reason;
+  const seen = new Set(), rows = [];
+  const lists = res.map((r) => (r.status === 'fulfilled' ? r.value : []));
+  for (let i = 0; i < limit; i++) for (const l of lists) { const r = l[i]; if (!r) continue; const k = norm(r.title) + '|' + norm(r.artist); if (!seen.has(k)) { seen.add(k); rows.push(r); } }
   cache.set(key, rows);
   return rows;
 }

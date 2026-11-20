@@ -1,5 +1,5 @@
 // Perfiles: foto, portada, estado, seguidores y pestañas de hilos / reposts. Las pantallas se arman con las piezas que pasa app.js (ctx).
-import * as store from './store.js?v=14';
+import * as store from './store.js?v=15';
 
 export const BANNERS = ['linear-gradient(135deg,#7c5cff,#ff3d9a)', 'linear-gradient(135deg,#2be3f2,#7c5cff)', 'linear-gradient(135deg,#ff9a3d,#ff3d9a)',
   'linear-gradient(135deg,#5ee6a8,#2be3f2)', 'linear-gradient(135deg,#1b1530,#7c5cff 60%,#2be3f2)', 'linear-gradient(135deg,#ff3d9a,#1b1530 70%)'];

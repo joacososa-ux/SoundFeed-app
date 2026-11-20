@@ -2,7 +2,7 @@
 import { firebaseConfig } from './config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, writeBatch, increment }
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, writeBatch, increment, documentId }
   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 export const configured = !Object.values(firebaseConfig).some((v) => !v || String(v).startsWith('PEGAR'));
@@ -189,3 +189,13 @@ const sub = (uid, name) => getDocs(query(collection(db, 'profiles', uid, name), 
   .then((s) => s.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: ms(d.data().createdAt) })));
 export const listProfileThreads = (uid) => sub(uid, 'threads');
 export const listProfileReposts = (uid) => sub(uid, 'reposts');
+
+// Búsqueda por prefijo (en minúsculas): personas por nombre de usuario y foros por el inicio de su identificador (artista-canción).
+export async function searchUsers(q) {
+  const s = await getDocs(query(collection(db, 'profiles'), where('username', '>=', q), where('username', '<=', q + '\uf8ff'), limit(8)));
+  return s.docs.map((d) => ({ uid: d.id, ...d.data() }));
+}
+export async function searchForums(q) {
+  const s = await getDocs(query(collection(db, 'forums'), where(documentId(), '>=', q), where(documentId(), '<=', q + '\uf8ff'), limit(8)));
+  return s.docs.map((d) => ({ slug: d.id, ...d.data() }));
+}

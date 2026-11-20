@@ -71,3 +71,16 @@ button.pf-stat:hover { background: rgba(255, 255, 255, .07); }
 @media (max-width: 760px) { .pf-banner { height: 160px; border-radius: 20px; } .pf-head { margin: -50px 14px 0; } .sf-toast { bottom: 84px; } }
 .pf-eavrow { pointer-events: none; }
 .pf-eavrow > * { pointer-events: auto; }
+
+.fsearch { margin: 0 0 14px; }
+.fsearch input { width: 100%; min-height: 50px; padding: 0 18px; border-radius: 16px; font-size: 16px; color: var(--text); background: var(--panel); border: 1px solid var(--line); }
+.fsearch input:focus { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.fsearch-res { display: grid; gap: 14px; margin-top: 12px; }
+.fs-sec { display: grid; gap: 4px; padding: 10px; border-radius: 20px; background: var(--panel); border: 1px solid var(--line); }
+.fs-sec h3 { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 2px 6px 4px; }
+.fs-row { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 14px; color: inherit; text-decoration: none; }
+.fs-row:hover { background: rgba(255, 255, 255, .07); }
+.fs-row span:not(.fs-ico):not(.av-pic) { display: grid; min-width: 0; }
+.fs-row small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-row b { overflow-wrap: anywhere; }
+.fs-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 255, 255, .08); flex: none; }
