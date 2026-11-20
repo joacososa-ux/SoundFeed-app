@@ -29,18 +29,38 @@ const COVKEY = 'sf_cov';
 const covLoad = () => { try { return JSON.parse(localStorage.getItem(COVKEY)) || {}; } catch (_) { return {}; } };
 const covPending = new Map();
 let covChain = Promise.resolve();
+// Devuelve la primera promesa que se resuelve bien (si todas fallan, rechaza).
+const firstOk = (ps) => new Promise((res, rej) => { let n = ps.length, last; ps.forEach((p) => p.then(res, (e) => { last = e; if (--n === 0) rej(last); })); });
+// Respaldo de portadas: Deezer (por JSONP, sin clave).
+async function deezerCover(title, artist) {
+  const q = new URLSearchParams({ q: first(artist) + ' ' + title, limit: '4', output: 'jsonp' });
+  const d = await jsonp('https://api.deezer.com/search?' + q, 5000);
+  const rows = (d && d.data) || [], nt = norm(title);
+  const hit = rows.find((r) => r.album && r.album.cover_big && norm(r.title).includes(nt)) || rows.find((r) => r.album && r.album.cover_big);
+  return hit ? hit.album.cover_big : null;
+}
+const covLanes = [Promise.resolve(), Promise.resolve(), Promise.resolve()];
+let covLane = 0;
 export function coverFor(title, artist) {
   const key = (String(title) + '|' + String(artist)).toLowerCase().slice(0, 120);
   const saved = covLoad()[key]; if (saved) return Promise.resolve(saved);
   if (covPending.has(key)) return covPending.get(key);
-  const job = () => itunesSearch(artist + ' ' + title, 3).then((rows) => {
-    const nt = norm(title), hit = rows.find((r) => r.cover && norm(r.title).includes(nt)) || rows.find((r) => r.cover);
-    if (!hit) return null;
-    const m = covLoad(), ks = Object.keys(m); if (ks.length > 250) delete m[ks[0]];
-    m[key] = hit.cover; try { localStorage.setItem(COVKEY, JSON.stringify(m)); } catch (_) {}
-    return hit.cover;
-  }).catch(() => null);
-  const p = (covChain = covChain.then(job, job)).finally(() => covPending.delete(key));
+  const job = async () => {
+    let u = null;
+    try {
+      const rows = await itunesSearch(artist + ' ' + title, 3), nt = norm(title);
+      const hit = rows.find((r) => r.cover && norm(r.title).includes(nt)) || rows.find((r) => r.cover);
+      u = hit ? hit.cover : null;
+    } catch (_) {}
+    if (!u) { try { u = await deezerCover(title, artist); } catch (_) {} }
+    if (u) {
+      const m = covLoad(), ks = Object.keys(m); if (ks.length > 250) delete m[ks[0]];
+      m[key] = u; try { localStorage.setItem(COVKEY, JSON.stringify(m)); } catch (_) {}
+    }
+    return u;
+  };
+  const i = covLane++ % covLanes.length;
+  const p = (covLanes[i] = covLanes[i].then(job, job)); p.finally(() => covPending.delete(key));
   covPending.set(key, p); return p;
 }
 export async function itunesSearch(term, limit = 8) {
@@ -48,7 +68,7 @@ export async function itunesSearch(term, limit = 8) {
   if (cache.has(key)) return cache.get(key);
   const q = new URLSearchParams({ term, media: 'music', entity: 'song', limit: String(limit) });
   const url = 'https://itunes.apple.com/search?' + q;
-  let data; try { data = await getJson(url); } catch (_) { data = await jsonp(url); }
+  let data; data = await firstOk([getJson(url, 5000), jsonp(url, 6000)]);
   const rows = (data.results || []).map((r) => ({
     title: r.trackName, artist: r.artistName, genre: r.primaryGenreName || '',
     preview: r.previewUrl || null, cover: String(r.artworkUrl100 || '').replace('100x100', '600x600') || null, link: r.trackViewUrl || null,
