@@ -59,11 +59,11 @@ export async function ensureForum(user, f) {
 export function watchForum(slug, cb, onErr) {
   const state = { forum: undefined, threads: [], posts: [], likes: [], reposts: [] };
   const push = () => { if (state.forum !== undefined) cb({ ...state }); };
-  const sub = (name, key, order) => onSnapshot(order ? query(collection(db, 'forums', slug, name), orderBy('createdAt', 'asc')) : collection(db, 'forums', slug, name),
-    (s) => { state[key] = s.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: ms(d.data().createdAt) })); push(); }, onErr);
+  const sub = (name, key, order, soft) => onSnapshot(order ? query(collection(db, 'forums', slug, name), orderBy('createdAt', 'asc')) : collection(db, 'forums', slug, name),
+    (s) => { state[key] = s.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: ms(d.data().createdAt) })); push(); }, soft ? () => {} : onErr);
   const offs = [
     onSnapshot(doc(db, 'forums', slug), (d) => { state.forum = d.exists() ? { slug, ...d.data(), createdAt: ms(d.data().createdAt) } : null; push(); }, onErr),
-    sub('threads', 'threads', true), sub('posts', 'posts', true), sub('likes', 'likes', false), sub('reposts', 'reposts', false),
+    sub('threads', 'threads', true), sub('posts', 'posts', true), sub('likes', 'likes', false), sub('reposts', 'reposts', false, true),
   ];
   return () => offs.forEach((f) => f());
 }
@@ -73,7 +73,12 @@ export async function addThread(user, slug, category, title, body, premium, meta
   b.set(ref, { category, title, body, uid: user.uid, author: user.name, createdAt: serverTimestamp(), ...(premium ? { premium: true } : {}) });
   b.set(doc(db, 'profiles', user.uid, 'threads', slug + '_' + ref.id), { slug, threadId: ref.id, ftitle: (meta && meta.title) || '', fartist: (meta && meta.artist) || '', category, title, body, createdAt: serverTimestamp() });
   b.update(doc(db, 'profiles', user.uid), { threads: increment(1) });
-  await b.commit();
+  try { await b.commit(); }
+  catch (e) {
+    // Si las reglas nuevas todavía no están publicadas, se publica el hilo solo (sin copia en el perfil).
+    if (!e || e.code !== 'permission-denied') throw e;
+    await setDoc(ref, { category, title, body, uid: user.uid, author: user.name, createdAt: serverTimestamp(), ...(premium ? { premium: true } : {}) });
+  }
   return ref;
 }
 export const addPost = (user, slug, threadId, body, premium) =>

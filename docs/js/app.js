@@ -1,4 +1,4 @@
-import * as store from './store.js?v=13';
+import * as store from './store.js?v=14';
 import * as music from './music.js?v=13';
 import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
 import * as fx from './fx.js?v=1';
