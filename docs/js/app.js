@@ -39,6 +39,7 @@ const moodLabel = (id) => LABEL[id] || id;
 const ICON = {
   heart: '<path d="M12 20.5S3.5 15.4 3.5 9.2A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.5 2.4c0 6.2-8.5 11.3-8.5 11.3z"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+  down: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
   card: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/>',
   star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
@@ -76,6 +77,19 @@ function closeMenu() {
   const b = $('.acct'); if (b) b.setAttribute('aria-expanded', 'false');
 }
 function closeSheet(now) { if (!SHEET) return; if (now === true) SHEET.remove(); else leave(SHEET); SHEET = null; document.body.classList.remove('noscroll'); if (!MENU) document.removeEventListener('keydown', menuKey); }
+/* ---------- instalar como app ---------- */
+let DEFER = null;
+const INSTALLED = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); DEFER = e; });
+window.addEventListener('appinstalled', () => { DEFER = null; toast('SoundFeed instalada ✓'); });
+async function installApp() {
+  closeMenu();
+  if (DEFER) { const d = DEFER; DEFER = null; d.prompt(); try { await d.userChoice; } catch (_) {} return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  showSheet('Instalar SoundFeed', [h('p', { class: 'snote' }, ios
+    ? 'En iPhone: tocá el botón Compartir de Safari (el cuadrado con la flecha) y elegí «Agregar a inicio».'
+    : 'Abrí el menú del navegador (⋮) y elegí «Instalar app» o «Agregar a la pantalla principal».')]);
+}
 function meU() { return S.user ? { ...S.user, thumb: S.me && S.me.thumb ? S.me.thumb : null, photo: S.me && S.me.thumb ? null : S.user.photo } : null; }
 function openMenu() {
   const u = meU(); if (!u) return;
@@ -84,6 +98,7 @@ function openMenu() {
     h('div', { class: 'mhead' }, avatarEl(u, 44), h('div', {}, h('b', {}, '@' + u.name), h('small', {}, S.premium ? 'Plan Premium' : 'Plan gratuito'))),
     item('Mi perfil', '', () => { closeMenu(); location.hash = 'perfil-' + u.uid; }, 'user', 0),
     item('Avisos', N.unread() ? String(N.unread()) : '', () => { closeMenu(); N.open(); }, 'bell', 1),
+    ...(INSTALLED ? [] : [item('Instalar app', '', installApp, 'down', 1)]),
     item('Cuenta', '', () => openSheet('cuenta'), 'card', 1),
     item('Plan', S.premium ? 'Premium' : 'Gratuito', () => openSheet('plan'), 'star', 2),
     h('div', { class: 'msep' }),
