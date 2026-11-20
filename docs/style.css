@@ -159,3 +159,44 @@ textarea { min-height: 76px; resize: vertical; }
 .search { display: flex; gap: 8px; }
 .sresults { display: grid; gap: 8px; margin-top: 10px; }
 .login[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ---------- Pulido de interfaz: barra superior, foro y móvil ---------- */
+.top { position: sticky; top: 0; z-index: 10; margin: 0 -20px; padding: 12px 20px; background: rgba(14,11,23,.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(52,43,82,.6); }
+.top-right { gap: 8px; }
+.pill { white-space: nowrap; }
+.pill.ok { max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Reproductor compacto: portada pequeña junto al título */
+.player { grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 12px 14px; }
+.player > * { grid-column: 1 / -1; }
+.player > .cover, .player > .cover + div { grid-column: auto; }
+.player > .cover { border-radius: 10px; font-size: 30px; }
+.fhead h1 { font-size: clamp(30px, 5vw, 46px); }
+.fhead { padding-bottom: 4px; }
+.forum > aside { top: 76px; }
+.threads { max-height: 62vh; overflow-y: auto; padding-right: 2px; }
+.panel { position: relative; }
+.compose { margin-top: 12px; }
+
+@media (max-width: 760px) {
+  .wrap { padding: 0 14px 48px; }
+  .top { margin: 0 -14px; padding: 10px 14px; }
+  .brand span { font-size: 19px; }
+  .brand svg { width: 32px; height: 32px; }
+  .pill { font-size: 12px; padding: 3px 10px; }
+  .pill.ok { max-width: 130px; }
+  .hero h1 { font-size: clamp(28px, 9vw, 38px); }
+  .hero p { font-size: 16px; }
+  .picker { padding: 16px; border-radius: 16px; }
+  .chip { padding: 8px 14px; }
+  .btn, .fav, .like { min-height: 44px; }
+  .btn.small { min-height: 40px; }
+  .search { flex-direction: column; }
+  .search .btn { width: 100%; }
+  .grid { grid-template-columns: 1fr; }
+  .threads { max-height: none; overflow: visible; }
+  .thread { padding: 14px; }
+  .panel { padding: 16px; }
+  .forum > aside { top: 0; }
+  .fhead h1 { font-size: clamp(28px, 9vw, 38px); }
+}
