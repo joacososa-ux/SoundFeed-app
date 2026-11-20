@@ -1,5 +1,5 @@
 import * as store from './store.js?v=12';
-import * as music from './music.js?v=12';
+import * as music from './music.js?v=13';
 import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
 
 const CATS = { letra: 'Análisis de letra', debate: 'Debate', anecdotas: 'Anécdotas', similares: 'Si te gusta esto' };
@@ -413,7 +413,7 @@ function coverBox(r) {
   const box = h('div', { class: 'rc-cover', 'aria-hidden': 'true', vars: { '--a': hue(r.title + r.artist) } }, h('b', {}, (r.title || '?').trim().charAt(0).toUpperCase()));
   const set = (u) => {
     if (!u) return;
-    const im = h('img', { src: u, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onload: () => box.classList.add('ok'), onerror: () => im.remove() });
+    const im = h('img', { src: u, alt: '', referrerpolicy: 'no-referrer', onload: () => box.classList.add('ok'), onerror: () => im.remove() });
     box.append(im);
   };
   if (r.cover) set(String(r.cover).replace('600x600', '300x300')); else music.coverFor(r.title, r.artist).then((u) => set(u && String(u).replace('600x600', '300x300')));
@@ -873,6 +873,13 @@ function route() {
   buildHome();
 }
 window.addEventListener('hashchange', route);
+/* ---------- pantalla de carga ---------- */
+function bootDone() {
+  const b = document.getElementById('boot'); if (!b || b.dataset.go) return; b.dataset.go = '1';
+  const fonts = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]) : Promise.resolve();
+  const wait = new Promise((r) => setTimeout(r, Math.max(0, 1400 - performance.now())));
+  Promise.all([fonts, wait]).then(() => { b.classList.add('out'); setTimeout(() => b.remove(), 800); });
+}
 (async function init() {
   const cb = await music.spotifyHandleCallback().catch(() => ({ error: 'No se pudo conectar Spotify.' }));
   if (cb) S.spotifyMsg = cb.ok ? 'Spotify conectado. Ahora las canciones suenan completas.' : cb.error;
@@ -883,5 +890,6 @@ window.addEventListener('hashchange', route);
     if (u) setGuest(false);
     if (first || !!was !== !!u) { first = false; S.slug = null; S.data = null; route(); }
     else { paintAccount(); if (S.data) renderForum(); }
+    bootDone();
   });
 })();
