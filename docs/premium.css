@@ -387,3 +387,5 @@ html.glass .auth .a-namebox input, .auth .a-namebox input, .auth .a-namebox inpu
 .fav { margin: 14px 0 0; }
 .tab { font-size: 14px; padding: 0 4px; }
 @media (max-width: 400px) { .tab { font-size: 13px; } }
+/* la portada siempre va por encima de la letra inicial */
+.rc-cover img, .fv .big-cover img { z-index: 2; }

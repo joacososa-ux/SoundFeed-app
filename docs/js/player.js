@@ -69,8 +69,10 @@ async function resolve(t) {
 async function go(i) {
   if (i < 0 || i >= Q.list.length) return;
   const my = ++seq; stopAll(); Q.i = i; kind = 'none'; ui(); $('.sfp-note').textContent = 'Buscando la canción…'; paint();
-  const t = cur(), p = await resolve(t); if (my !== seq) return;
-  if (p.cover && !t.cover) t.cover = p.cover;
+  const t = cur();
+  if (!t.cover) music.coverFor(t.title, t.artist).then((u) => { if (u && !t.cover) { t.cover = String(u).replace('600x600', '300x300'); if (my === seq) paint(); } }).catch(() => {});
+  const p = await resolve(t); if (my !== seq) return;
+  if (p.cover && !t.cover) { t.cover = p.cover; paint(); }
   // Cualquier reproducción suelta de la página (foro) se frena para no superponer audio.
   document.querySelectorAll('iframe.yt, .player audio').forEach((n) => { if (n.tagName === 'AUDIO') n.pause(); else n.remove(); });
   if (p.kind === 'youtube' && /^[\w-]{11}$/.test(p.youtubeId || '')) {

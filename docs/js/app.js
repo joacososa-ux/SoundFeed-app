@@ -3,7 +3,7 @@ import * as music from './music.js?v=13';
 import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
 import * as fx from './fx.js?v=1';
 import { initProfile } from './profile.js?v=1';
-import * as Player from './player.js?v=1'; // player: prueba, se saca borrando estas líneas
+import * as Player from './player.js?v=2'; // player: prueba, se saca borrando estas líneas
 
 const CATS = { letra: 'Análisis de letra', debate: 'Debate', anecdotas: 'Anécdotas', similares: 'Si te gusta esto' };
 const $ = (s, el) => (el || document).querySelector(s);
