@@ -307,3 +307,45 @@ a.songchip:hover { background: rgba(43,227,242,.2); }
 }
 
 .compose[hidden], .pickbox[hidden] { display: none; }
+
+
+/* ---------- Ánimo del día: pantalla de entrada con círculo de emociones ---------- */
+.noscroll { overflow: hidden; }
+.splash { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; overflow-y: auto; background: radial-gradient(900px 560px at 50% 45%, #1d1535, #0e0b17 70%); animation: sp-in .5s ease both; }
+.splash.out { animation: sp-out .45s ease forwards; pointer-events: none; }
+@keyframes sp-in { from { opacity: 0; } }
+@keyframes sp-out { to { opacity: 0; scale: 1.06; } }
+.splash-in { display: grid; justify-items: center; gap: 14px; padding: 16px 0 24px; max-width: 100vw; }
+.stage { --r: min(34vmin, 265px); position: relative; width: calc(var(--r) * 2 + 190px); height: calc(var(--r) * 2 + 70px); max-width: 100vw; }
+.orbit { position: absolute; left: 50%; top: 50%; width: 0; height: 0; animation: orb-spin 140s linear infinite; }
+.orbit::before { content: ""; position: absolute; left: calc(var(--r) * -1); top: calc(var(--r) * -1); width: calc(var(--r) * 2); height: calc(var(--r) * 2); border: 1.5px dashed var(--line); border-radius: 50%; }
+.orb-item { position: absolute; left: 0; top: 0; transform: rotate(var(--a)) translateY(calc(var(--r) * -1)) rotate(calc(var(--a) * -1)); }
+.orb-hold { position: absolute; left: 0; top: 0; width: 0; height: 0; animation: orb-spin 140s linear infinite reverse; }
+.stage:hover .orbit, .stage:hover .orb-hold, .stage:focus-within .orbit, .stage:focus-within .orb-hold { animation-play-state: paused; }
+@keyframes orb-spin { to { transform: rotate(360deg); } }
+.orb { position: absolute; left: 0; top: 0; translate: -50% -50%; display: flex; align-items: center; gap: 9px; white-space: nowrap; min-height: 46px; padding: 0 20px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--panel); color: var(--text); font-weight: 700; font-size: 15px; cursor: pointer; transition: background .2s, color .2s, border-color .2s, box-shadow .2s; animation: orb-pop .6s calc(var(--i) * 70ms) cubic-bezier(.2, .9, .3, 1.3) both; }
+@keyframes orb-pop { from { opacity: 0; scale: .5; } }
+.orb i { width: 12px; height: 12px; border-radius: 50%; background: var(--mc); flex: none; }
+.orb:hover { border-color: var(--mc); }
+.orb[aria-pressed="true"] { background: var(--mc); border-color: var(--mc); color: #0e0b17; box-shadow: 0 0 28px color-mix(in srgb, var(--mc) 45%, transparent); }
+.orb[aria-pressed="true"] i { background: #0e0b17; }
+.orb[aria-pressed="true"]::before { content: "✓"; font-weight: 800; }
+.orb[aria-pressed="true"]::after { content: ""; position: absolute; inset: -2px; border-radius: 999px; border: 2px solid var(--mc); animation: orb-ring .7s ease-out forwards; pointer-events: none; }
+@keyframes orb-ring { from { opacity: .9; scale: 1; } to { opacity: 0; scale: 1.4; } }
+.center { position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: calc(var(--r) * 1.3); display: grid; gap: 10px; text-align: center; animation: sp-in .8s .2s ease both; }
+.center h1 { font-size: clamp(26px, 5vw, 40px); font-weight: 800; letter-spacing: -.02em; }
+.center .hint { margin: 0; }
+.splash-act { display: grid; justify-items: center; gap: 6px; }
+.btn.big { min-height: 52px; padding: 0 32px; font-size: 16px; }
+.skip { background: none; border: 0; color: var(--muted); min-height: 44px; padding: 0 16px; cursor: pointer; text-decoration: underline; }
+.todaybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.todaychip { background: var(--mc); color: #0e0b17; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 14px; }
+@media (max-width: 520px) {
+  .stage { --r: min(35vw, 142px); width: 100vw; height: calc(var(--r) * 2 + 60px); }
+  .orb { min-height: 40px; padding: 0 11px; font-size: 13px; gap: 6px; }
+  .orb i { width: 9px; height: 9px; }
+  .center h1 { font-size: 24px; }
+  .center { width: calc(var(--r) * 1.4); }
+  .center .eyebrow, .center .hint { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .orbit, .orb-hold, .orb, .center, .splash, .orb[aria-pressed="true"]::after { animation: none; } }
