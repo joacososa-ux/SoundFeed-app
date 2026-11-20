@@ -18,11 +18,37 @@ function jsonp(url, ms = 7000) {
     document.head.append(sc);
   });
 }
+// Primero una consulta directa (CORS); si el navegador la bloquea, se usa JSONP como respaldo.
+async function getJson(url, ms = 6000) {
+  const ac = new AbortController(), tm = setTimeout(() => ac.abort(), ms);
+  try { const r = await fetch(url, { signal: ac.signal }); if (!r.ok) throw new Error('http'); return await r.json(); }
+  finally { clearTimeout(tm); }
+}
+// Portadas: se guardan en el dispositivo para no repetir consultas y se piden de a una.
+const COVKEY = 'sf_cov';
+const covLoad = () => { try { return JSON.parse(localStorage.getItem(COVKEY)) || {}; } catch (_) { return {}; } };
+const covPending = new Map();
+let covChain = Promise.resolve();
+export function coverFor(title, artist) {
+  const key = (String(title) + '|' + String(artist)).toLowerCase().slice(0, 120);
+  const saved = covLoad()[key]; if (saved) return Promise.resolve(saved);
+  if (covPending.has(key)) return covPending.get(key);
+  const job = () => itunesSearch(artist + ' ' + title, 3).then((rows) => {
+    const nt = norm(title), hit = rows.find((r) => r.cover && norm(r.title).includes(nt)) || rows.find((r) => r.cover);
+    if (!hit) return null;
+    const m = covLoad(), ks = Object.keys(m); if (ks.length > 250) delete m[ks[0]];
+    m[key] = hit.cover; try { localStorage.setItem(COVKEY, JSON.stringify(m)); } catch (_) {}
+    return hit.cover;
+  }).catch(() => null);
+  const p = (covChain = covChain.then(job, job)).finally(() => covPending.delete(key));
+  covPending.set(key, p); return p;
+}
 export async function itunesSearch(term, limit = 8) {
   const key = 'it:' + term + limit;
   if (cache.has(key)) return cache.get(key);
   const q = new URLSearchParams({ term, media: 'music', entity: 'song', limit: String(limit) });
-  const data = await jsonp(`https://itunes.apple.com/search?${q}`);
+  const url = 'https://itunes.apple.com/search?' + q;
+  let data; try { data = await getJson(url); } catch (_) { data = await jsonp(url); }
   const rows = (data.results || []).map((r) => ({
     title: r.trackName, artist: r.artistName, genre: r.primaryGenreName || '',
     preview: r.previewUrl || null, cover: String(r.artworkUrl100 || '').replace('100x100', '600x600') || null, link: r.trackViewUrl || null,
