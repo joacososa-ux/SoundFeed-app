@@ -292,11 +292,19 @@ function renderDetail(list) {
 }
 
 /* ---------- portada y reproductor ---------- */
+// Si un nombre es más ancho que la tarjeta, se desliza de lado a lado (y se desvanece en los bordes).
+function fitNames(root) {
+  root.querySelectorAll('.mq').forEach((el) => {
+    const s = el.firstElementChild, d = s ? s.scrollWidth - el.clientWidth : 0;
+    el.classList.toggle('scroll', d > 2);
+    if (d > 2) { el.style.setProperty('--d', d + 'px'); el.style.setProperty('--t', Math.max(6, d / 20 + 4) + 's'); }
+  });
+}
 async function loadPlayer(slug, t) {
   const aside = S.ui.aside;
-  const paint = (kids) => { if (S.slug === slug && S.ui.aside === aside) aside.replaceChildren(h('div', { class: 'player' }, kids)); };
+  const paint = (kids) => { if (S.slug === slug && S.ui.aside === aside) { aside.replaceChildren(h('div', { class: 'player' }, kids)); requestAnimationFrame(() => fitNames(aside)); } };
   const head = (cover) => [h('div', { class: 'cover' }, cover ? h('img', { src: cover, alt: `Portada de ${t.title}`, referrerpolicy: 'no-referrer' }) : t.title.trim().charAt(0).toUpperCase()),
-    h('div', {}, h('div', { class: 'tt' }, t.title), h('div', { class: 'sm' }, t.artist))];
+    h('div', { class: 'names' }, h('div', { class: 'tt mq' }, h('span', {}, t.title)), h('div', { class: 'sm mq' }, h('span', {}, t.artist)))];
   paint([...head(null), h('div', { class: 'sm', role: 'status' }, 'Buscando la canción…')]);
   const p = await music.playback(t.title, t.artist);
   const kids = head(p.cover);
