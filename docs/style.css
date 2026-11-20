@@ -550,3 +550,13 @@ header.top .top-right .btn { white-space: nowrap; }
   header.top .brand span { font-size: 18px; }
   .acct { gap: 8px; padding: 3px 10px 3px 3px; }
 }
+
+/* logo a la izquierda, avatar y menú a la derecha */
+header.top { grid-template-columns: auto minmax(0, 1fr) auto; }
+header.top .brand { grid-column: 1; justify-self: start; }
+header.top .nav { grid-column: 2; justify-self: start; margin-left: 8px; }
+header.top .top-right { grid-column: 3; }
+@media (max-width: 760px) {
+  header.top .brand svg { width: 32px; height: 32px; }
+  header.top .brand span { font-size: 19px; }
+}
