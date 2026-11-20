@@ -560,3 +560,7 @@ header.top .top-right { grid-column: 3; }
   header.top .brand svg { width: 32px; height: 32px; }
   header.top .brand span { font-size: 19px; }
 }
+
+
+/* portadas siempre visibles (sin depender del evento load; la inicial queda debajo como respaldo) */
+.rc-cover img { opacity: 1; transition: none; }
