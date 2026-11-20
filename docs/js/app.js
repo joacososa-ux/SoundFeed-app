@@ -449,7 +449,7 @@ function renderFavsPage() {
 function todayStrip() {
   const t = S.today;
   return h('div', { class: 'todaybar' },
-    t.moods.length ? [h('span', { class: 'hint' }, 'Hoy te sentís:'), t.moods.map((m) => h('span', { class: 'todaychip', vars: { '--mc': moodColor(m) } }, moodLabel(m))), h('button', { class: 'btn ghost small', type: 'button', onclick: openSplash }, 'Cambiar')]
+    t.moods.length ? [h('span', { class: 'hint' }, 'Hoy te sentís:'), ...t.moods.map((m) => h('span', { class: 'todaychip', vars: { '--mc': moodColor(m) } }, moodLabel(m))), h('button', { class: 'btn ghost small', type: 'button', onclick: openSplash }, 'Cambiar')]
       : [h('span', { class: 'hint' }, 'Todavía no elegiste tu ánimo de hoy.'), h('button', { class: 'btn small', type: 'button', onclick: openSplash }, 'Elegir ánimo')]);
 }
 function openSplash() {
