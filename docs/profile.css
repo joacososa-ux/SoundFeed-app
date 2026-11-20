@@ -84,3 +84,9 @@ button.pf-stat:hover { background: rgba(255, 255, 255, .07); }
 .fs-row small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fs-row b { overflow-wrap: anywhere; }
 .fs-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 255, 255, .08); flex: none; }
+
+/* avisos */
+.acct .dot.nb { width: 17px; height: 17px; top: -4px; right: -4px; display: grid; place-items: center; font: 700 10px/1 var(--font-body, system-ui); font-style: normal; color: #fff; background: linear-gradient(135deg, #ff3d9a, #7c5cff); }
+.nt-perm { display: grid; gap: 8px; margin-bottom: 14px; }
+.nt-perm .btn { width: 100%; }
+.fs-list { display: grid; gap: 2px; }

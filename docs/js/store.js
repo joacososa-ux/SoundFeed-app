@@ -2,7 +2,7 @@
 import { firebaseConfig } from './config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, writeBatch, increment, documentId }
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, deleteDoc, collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, writeBatch, increment, documentId, Timestamp }
   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 export const configured = !Object.values(firebaseConfig).some((v) => !v || String(v).startsWith('PEGAR'));
@@ -73,6 +73,7 @@ export async function addThread(user, slug, category, title, body, premium, meta
   b.set(ref, { category, title, body, uid: user.uid, author: user.name, createdAt: serverTimestamp(), ...(premium ? { premium: true } : {}) });
   b.set(doc(db, 'profiles', user.uid, 'threads', slug + '_' + ref.id), { slug, threadId: ref.id, ftitle: (meta && meta.title) || '', fartist: (meta && meta.artist) || '', category, title, body, createdAt: serverTimestamp() });
   b.update(doc(db, 'profiles', user.uid), { threads: increment(1) });
+  b.set(doc(db, 'feedEvents', slug + '_' + ref.id), { by: user.uid, name: user.name, slug, threadId: ref.id, title: String(title).slice(0, 120), ftitle: (meta && meta.title) || '', createdAt: serverTimestamp() });
   try { await b.commit(); }
   catch (e) {
     // Si las reglas nuevas todavía no están publicadas, se publica el hilo solo (sin copia en el perfil).
@@ -160,11 +161,34 @@ export async function saveProfile(uid, p) {
   b.update(doc(db, 'profiles', uid), { thumb: p.thumb || null, bannerIdx: p.bannerIdx | 0, status: { e: p.e || '', t: p.t || '' } });
   await b.commit();
 }
-export async function setFollow(me, target, on) {
-  const b = writeBatch(db), f = doc(db, 'follows', me + '_' + target);
-  if (on) b.set(f, { from: me, to: target, createdAt: serverTimestamp() }); else b.delete(f);
-  b.update(doc(db, 'profiles', target), { followers: increment(on ? 1 : -1) });
-  b.update(doc(db, 'profiles', me), { following: increment(on ? 1 : -1) });
+export async function setFollow(me, target, on, name) {
+  const run = async (withNotif) => {
+    const b = writeBatch(db), f = doc(db, 'follows', me + '_' + target), n = doc(db, 'notifs', target, 'items', me);
+    if (on) b.set(f, { from: me, to: target, createdAt: serverTimestamp() }); else b.delete(f);
+    if (withNotif) { if (on) b.set(n, { from: me, name: String(name || 'Alguien').slice(0, 60), type: 'follow', createdAt: serverTimestamp() }); else b.delete(n); }
+    b.update(doc(db, 'profiles', target), { followers: increment(on ? 1 : -1) });
+    b.update(doc(db, 'profiles', me), { following: increment(on ? 1 : -1) });
+    await b.commit();
+  };
+  try { await run(true); }
+  catch (e) { if (!e || e.code !== 'permission-denied') throw e; await run(false); } // reglas de avisos todavía sin publicar
+}
+// Avisos: nuevos seguidores (documentos propios) y hilos nuevos de la gente que seguís.
+export function watchNotifs(uid, cb) {
+  if (!configured) return () => {};
+  return onSnapshot(query(collection(db, 'notifs', uid, 'items'), orderBy('createdAt', 'desc'), limit(30)),
+    (s) => cb(s.docs.filter((d) => d.data().createdAt).map((d) => ({ id: d.id, type: 'follow', uid: d.data().from, name: d.data().name, at: ms(d.data().createdAt) }))), () => {});
+}
+export function watchFeedEvents(sinceMs, cb) {
+  if (!configured) return () => {};
+  return onSnapshot(query(collection(db, 'feedEvents'), where('createdAt', '>', Timestamp.fromMillis(sinceMs)), orderBy('createdAt', 'asc'), limit(60)),
+    (s) => cb(s.docChanges().filter((c) => c.type === 'added' && c.doc.data().createdAt).map((c) => { const d = c.doc.data(); return { id: c.doc.id, type: 'thread', uid: d.by, name: d.name, slug: d.slug, threadId: d.threadId, title: d.title, ftitle: d.ftitle, at: ms(d.createdAt) }; })), () => {});
+}
+// Guarda solo la foto (y su miniatura) sin tocar la portada.
+export async function saveAvatarOnly(uid, avatar, thumb) {
+  const b = writeBatch(db);
+  b.set(doc(db, 'profiles', uid, 'media', 'main'), { avatar }, { merge: true });
+  b.update(doc(db, 'profiles', uid), { thumb });
   await b.commit();
 }
 export function watchFollowing(uid, cb) {

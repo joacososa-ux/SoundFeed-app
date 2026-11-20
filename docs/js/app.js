@@ -1,5 +1,6 @@
-import * as store from './store.js?v=15';
+import * as store from './store.js?v=16';
 import * as music from './music.js?v=15';
+import { initNotifs } from './notifs.js?v=1';
 import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
 import * as fx from './fx.js?v=1';
 import { initProfile } from './profile.js?v=1';
@@ -37,6 +38,7 @@ const moodLabel = (id) => LABEL[id] || id;
 // Íconos de línea (mismo trazo en toda la app). Devuelve un <span class="ic"> con el SVG.
 const ICON = {
   heart: '<path d="M12 20.5S3.5 15.4 3.5 9.2A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.5 2.4c0 6.2-8.5 11.3-8.5 11.3z"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
   card: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/>',
   star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
@@ -81,6 +83,7 @@ function openMenu() {
   const panel = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Tu cuenta' },
     h('div', { class: 'mhead' }, avatarEl(u, 44), h('div', {}, h('b', {}, '@' + u.name), h('small', {}, S.premium ? 'Plan Premium' : 'Plan gratuito'))),
     item('Mi perfil', '', () => { closeMenu(); location.hash = 'perfil-' + u.uid; }, 'user', 0),
+    item('Avisos', N.unread() ? String(N.unread()) : '', () => { closeMenu(); N.open(); }, 'bell', 1),
     item('Cuenta', '', () => openSheet('cuenta'), 'card', 1),
     item('Plan', S.premium ? 'Premium' : 'Gratuito', () => openSheet('plan'), 'star', 2),
     h('div', { class: 'msep' }),
@@ -153,7 +156,7 @@ function paintAccount() {
   }
   box.replaceChildren(h('button', { class: 'acct', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': String(!!MENU), 'aria-label': 'Menú de ' + u.name, onclick: () => (MENU ? closeMenu() : openMenu()) },
     avatarEl(meU(), 34), h('span', { class: 'burger', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
-    u.password && !u.verified ? h('em', { class: 'dot', title: 'Confirmá tu correo' }) : ''));
+    N.unread() ? h('em', { class: 'dot nb', title: 'Tenés avisos nuevos' }, String(Math.min(N.unread(), 9))) : u.password && !u.verified ? h('em', { class: 'dot', title: 'Confirmá tu correo' }) : ''));
 }
 
 /* ---------- acceso: ingreso, registro y nombre de usuario ---------- */
@@ -450,8 +453,9 @@ function watchAccount(uid) {
   if (S.offFol) { S.offFol(); S.offFol = null; } if (S.offMe) { S.offMe(); S.offMe = null; }
   S.premium = false; S.favs = []; S.following = new Set(); S.me = null;
   if (!uid) return;
-  S.offFol = store.watchFollowing(uid, (set) => { S.following = set; PF.rerender(); });
-  S.offMe = store.watchProfile(uid, (p) => { S.me = p; paintAccount(); });
+  S.folReady = false; N.stop(); N.start(uid);
+  S.offFol = store.watchFollowing(uid, (set) => { S.following = set; S.folReady = true; PF.rerender(); N.evaluate(); });
+  S.offMe = store.watchProfile(uid, (p) => { S.me = p; paintAccount(); if (p && !p.thumb && S.user && S.user.photo) PF.syncPhoto(S.user); });
   S.offPlan = store.watchPlan(uid, (p) => { S.premium = p; renderPlan(); });
   S.offFavs = store.watchFavorites(uid, (f) => { S.favs = f; renderPlan(); });
 }
@@ -976,6 +980,7 @@ function openSplash() {
 
 /* ---------- perfiles ---------- */
 Player.init({ music, h, toast }); // player:
+const N = initNotifs({ h, S, toast, showSheet, closeSheet, ago, avatarEl, onChange: () => paintAccount() });
 const PF = initProfile({ h, S, fx, ico, hue, ago, errMsg, showSheet, closeSheet, view, avatarEl, toast, onMeSaved: () => PF.invalidate(S.user.uid) });
 function authorLink(uid, name, cls) { return uid ? h('a', { class: 'author' + (cls ? ' ' + cls : ''), href: '#perfil-' + uid }, name || 'Oyente') : h(cls === 'plain' ? 'span' : 'b', {}, name || 'Oyente'); }
 // Botón de repost: un repost por persona e hilo.
@@ -1044,3 +1049,4 @@ function bootDone() {
     bootDone();
   });
 })();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {}); // app instalable

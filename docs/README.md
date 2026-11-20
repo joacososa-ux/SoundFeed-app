@@ -53,3 +53,9 @@ js/profile.js           perfiles, seguidores y edición de imágenes
 js/player.js            reproductor flotante (prueba)
 firestore.rules         reglas de seguridad
 ```
+
+## 7. App instalable y avisos
+
+- `manifest.webmanifest`, `sw.js` e `icons/` hacen que SoundFeed se pueda instalar (iPhone: Compartir → Agregar a inicio; Android/Chrome: Instalar app).
+- Avisos de nuevo seguidor y de hilos nuevos de la gente que seguís: campana en el menú de cuenta. Llegan con la app abierta o en segundo plano. Para avisar con la app cerrada del todo hace falta un servidor (Cloud Functions + Firebase Cloud Messaging), que exige el plan Blaze.
+- Hay que volver a publicar `docs/firestore.rules` (se agregaron `notifs` y `feedEvents`).

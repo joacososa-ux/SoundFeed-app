@@ -1,5 +1,5 @@
 // Perfiles: foto, portada, estado, seguidores y pestañas de hilos / reposts. Las pantallas se arman con las piezas que pasa app.js (ctx).
-import * as store from './store.js?v=15';
+import * as store from './store.js?v=16';
 
 export const BANNERS = ['linear-gradient(135deg,#7c5cff,#ff3d9a)', 'linear-gradient(135deg,#2be3f2,#7c5cff)', 'linear-gradient(135deg,#ff9a3d,#ff3d9a)',
   'linear-gradient(135deg,#5ee6a8,#2be3f2)', 'linear-gradient(135deg,#1b1530,#7c5cff 60%,#2be3f2)', 'linear-gradient(135deg,#ff3d9a,#1b1530 70%)'];
@@ -101,7 +101,7 @@ export function initProfile(ctx) {
       const now = !S.following.has(uid); b.disabled = true;
       if (now) S.following.add(uid); else S.following.delete(uid);
       b.className = 'btn ' + (now ? 'following' : 'cta') + (small ? ' small' : ' pf-wide'); b.textContent = now ? 'Siguiendo ✓' : 'Seguir'; if (now) fx.burst(b);
-      try { await store.setFollow(S.user.uid, uid, now); }
+      try { await store.setFollow(S.user.uid, uid, now, S.user.name); }
       catch (e) { if (now) S.following.delete(uid); else S.following.add(uid); b.className = 'btn ' + (!now ? 'following' : 'cta') + (small ? ' small' : ' pf-wide'); b.textContent = !now ? 'Siguiendo ✓' : 'Seguir'; ctx.toast(errMsg(e)); }
       finally { b.disabled = false; }
     });
@@ -162,5 +162,15 @@ export function initProfile(ctx) {
       h('div', { class: 'pf-lbl' }, 'Estado'), h('div', { class: 'pf-emos' }, emos), txt, cnt, note, file, save]);
   }
 
-  return { build, lite, fillAvatars, followBtn, invalidate: (uid) => cache.delete(uid), rerender: () => { if (cur && cur.root && cur.root.isConnected) render(cur); } };
+  // La foto de Google solo existe en el dispositivo de cada persona: se guarda una copia chica para que los demás la vean.
+  let synced = null;
+  async function syncPhoto(u) {
+    if (!u || !u.photo || synced === u.uid) return; synced = u.uid;
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = String(u.photo).replace(/=s\d+-c$/, '=s256-c'); });
+      const full = crop(img, 256, 256, 0.82, 60).url, thumb = crop(img, 64, 64, 0.8, 8).url;
+      await store.saveAvatarOnly(u.uid, full, thumb); cache.delete(u.uid);
+    } catch (_) {}
+  }
+  return { build, lite, fillAvatars, syncPhoto, followBtn, invalidate: (uid) => cache.delete(uid), rerender: () => { if (cur && cur.root && cur.root.isConnected) render(cur); } };
 }

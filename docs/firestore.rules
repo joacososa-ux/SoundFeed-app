@@ -87,6 +87,26 @@ service cloud.firestore {
     }
 
     // Seguir: un documento por relación, con id <quien sigue>_<a quién>.
+    // Avisos: el nuevo seguidor deja su aviso en la bandeja de la otra persona; los hilos nuevos se anuncian en feedEvents.
+    match /notifs/{uid}/items/{from} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && from == request.auth.uid && uid != request.auth.uid
+        && request.resource.data.from == request.auth.uid && request.resource.data.type == 'follow'
+        && text(request.resource.data.name, 60) && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly(['from', 'name', 'type', 'createdAt']);
+      allow delete: if signedIn() && (request.auth.uid == uid || from == request.auth.uid);
+    }
+    match /feedEvents/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.by == request.auth.uid
+        && text(request.resource.data.name, 60) && text(request.resource.data.slug, 80) && request.resource.data.threadId is string
+        && request.resource.data.title is string && request.resource.data.title.size() <= 120
+        && request.resource.data.ftitle is string && request.resource.data.ftitle.size() <= 120
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly(['by', 'name', 'slug', 'threadId', 'title', 'ftitle', 'createdAt']);
+      allow update, delete: if false;
+    }
+
     match /follows/{id} {
       allow read: if true;
       allow create: if signedIn() && request.resource.data.from == request.auth.uid
