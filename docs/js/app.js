@@ -42,22 +42,89 @@ const errMsg = (e) => (e && e.code === 'permission-denied' ? 'No tenés permiso 
 
 /* ---------- cuenta, bienvenida y Spotify ---------- */
 function setGuest(v) { S.guest = v; try { v ? sessionStorage.setItem('sf_guest', '1') : sessionStorage.removeItem('sf_guest'); } catch (_) {} }
-function paintAccount() {
-  const box = $('#account');
-  if (S.user) {
-    box.replaceChildren(
-      h('span', { class: 'pill ok' }, S.user.photo ? h('img', { class: 'avatar', src: S.user.photo, alt: '', referrerpolicy: 'no-referrer' }) : h('i'), S.user.name),
-      S.premium ? h('span', { class: 'badge', title: 'Plan Premium' }, 'Premium') : h('span', { class: 'pill', title: 'El plan Premium llega pronto' }, 'Plan gratuito'),
-      S.user.password && !S.user.verified && h('button', { class: 'btn ghost small', type: 'button', title: 'Te enviamos un correo para confirmar tu dirección', onclick: resendVerify }, 'Confirmá tu correo'),
-      music.spotifyAvailable() && (music.spotifyConnected()
-        ? h('span', { class: 'pill ok' }, h('i'), music.spotifyPremium() ? 'Spotify Premium' : 'Spotify conectado')
-        : h('button', { class: 'btn ghost small', type: 'button', onclick: music.spotifyConnect }, 'Conectar Spotify')),
-      h('button', { class: 'btn ghost small', type: 'button', onclick: () => store.logout() }, 'Salir'));
-  } else {
-    box.replaceChildren(h('span', { class: 'pill' }, h('i'), 'Modo visita (solo lectura)'),
-      store.configured && h('button', { class: 'btn small', type: 'button', onclick: () => { setGuest(false); route(); } }, 'Iniciar sesión'));
-  }
+/* ---------- cuenta: avatar y menú ---------- */
+function avatarEl(u, size) {
+  const el = h('span', { class: 'av-pic', 'aria-hidden': 'true', vars: { '--s': (size || 34) + 'px', '--a': hue(u.uid || u.name) } });
+  el.append(h('b', {}, (u.name || '?').charAt(0).toUpperCase()));
+  if (u.photo) el.append(h('img', { src: u.photo, alt: '', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() }));
+  return el;
 }
+let MENU = null, SHEET = null;
+function menuKey(e) { if (e.key === 'Escape') { if (SHEET) closeSheet(); else closeMenu(); } }
+function closeMenu() {
+  if (!MENU) return;
+  MENU.remove(); MENU = null; document.removeEventListener('keydown', menuKey);
+  const b = $('.acct'); if (b) b.setAttribute('aria-expanded', 'false');
+}
+function closeSheet() { if (!SHEET) return; SHEET.remove(); SHEET = null; document.body.classList.remove('noscroll'); if (!MENU) document.removeEventListener('keydown', menuKey); }
+function openMenu() {
+  const u = S.user; if (!u) return;
+  const item = (label, sub, fn) => h('button', { class: 'mi', type: 'button', role: 'menuitem', onclick: fn }, h('span', {}, label), sub ? h('small', {}, sub) : '');
+  const panel = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Tu cuenta' },
+    h('div', { class: 'mhead' }, avatarEl(u, 44), h('div', {}, h('b', {}, '@' + u.name), h('small', {}, S.premium ? 'Plan Premium' : 'Plan gratuito'))),
+    item('Perfil', '', () => openSheet('perfil')),
+    item('Cuenta', '', () => openSheet('cuenta')),
+    item('Plan', S.premium ? 'Premium' : 'Gratuito', () => openSheet('plan')),
+    h('div', { class: 'msep' }),
+    h('button', { class: 'mi danger', type: 'button', role: 'menuitem', onclick: () => { closeMenu(); store.logout(); } }, 'Cerrar sesión'));
+  MENU = h('div', { class: 'menu-back', onclick: (e) => { if (e.target === MENU) closeMenu(); } }, panel);
+  document.body.append(MENU); document.addEventListener('keydown', menuKey);
+  const b = $('.acct'); if (b) b.setAttribute('aria-expanded', 'true');
+  const f = panel.querySelector('.mi'); if (f) f.focus();
+}
+function openSheet(kind) {
+  closeMenu(); closeSheet();
+  const u = S.user; if (!u) return;
+  const row = (k, v) => h('div', { class: 'srow' }, h('span', {}, k), h('b', {}, v));
+  const msg = h('p', { class: 'snote', role: 'status' });
+  const mail = (label, fn, ok) => h('button', { class: 'btn ghost small', type: 'button', onclick: async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    try { await fn(); msg.textContent = ok; } catch (_) { msg.textContent = 'No se pudo enviar ahora. Probá más tarde.'; }
+  } }, label);
+  let title = 'Perfil', body = [];
+  if (kind === 'perfil') {
+    body = [h('div', { class: 'sprof' }, avatarEl(u, 72), h('div', {}, h('h3', {}, '@' + u.name), h('p', {}, S.premium ? 'Plan Premium' : 'Plan gratuito'))),
+      row('Favoritos guardados', String(S.favs.length)),
+      h('p', { class: 'snote' }, 'Tu nombre de usuario es el que ven los demás en los foros. Por ahora no se puede cambiar.')];
+  } else if (kind === 'cuenta') {
+    title = 'Cuenta';
+    const acts = [];
+    if (u.password) {
+      if (!u.verified) acts.push(mail('Reenviar correo de confirmación', () => store.resendVerification(), 'Te mandamos el correo de confirmación.'));
+      acts.push(mail('Cambiar contraseña', () => store.resetPassword(u.email), 'Te mandamos un enlace para cambiar la contraseña.'));
+    }
+    body = [row('Correo', u.email || '—'), row('Ingreso con', u.password ? 'Correo y contraseña' : 'Google'),
+      u.password ? row('Correo confirmado', u.verified ? 'Sí' : 'Todavía no') : '', acts.length ? h('div', { class: 'sacts' }, acts) : '', msg];
+  } else {
+    title = 'Plan';
+    body = [h('div', { class: 'splan' }, h('b', {}, S.premium ? 'Premium' : 'Gratuito'), h('small', {}, S.premium ? 'Tenés todo desbloqueado.' : 'Tu plan actual')),
+      h('ul', { class: 'slist' },
+        h('li', {}, 'Foros, hilos y respuestas'),
+        h('li', {}, FREE_RECS + ' recomendaciones por ánimo'),
+        h('li', { class: S.premium ? '' : 'off' }, 'Hasta ' + PREMIUM_RECS + ' recomendaciones'),
+        h('li', { class: S.premium ? '' : 'off' }, 'Favoritos'),
+        h('li', { class: S.premium ? '' : 'off' }, 'Insignia Premium')),
+      S.premium ? '' : h('p', { class: 'snote' }, 'El plan Premium llega pronto.')];
+  }
+  const sheet = h('section', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    h('div', { class: 'sheet-head' }, h('h2', {}, title), h('button', { class: 'sheet-x', type: 'button', 'aria-label': 'Cerrar', onclick: closeSheet }, '✕')),
+    h('div', { class: 'sheet-body' }, body));
+  SHEET = h('div', { class: 'menu-back sheet-back', onclick: (e) => { if (e.target === SHEET) closeSheet(); } }, sheet);
+  document.body.classList.add('noscroll'); document.body.append(SHEET); document.addEventListener('keydown', menuKey);
+  const x = sheet.querySelector('.sheet-x'); if (x) x.focus();
+}
+function paintAccount() {
+  const box = $('#account'), u = S.user;
+  if (!u) {
+    closeMenu(); closeSheet();
+    box.replaceChildren(store.configured ? h('button', { class: 'btn small', type: 'button', onclick: () => { setGuest(false); route(); } }, 'Iniciar sesión') : '');
+    return;
+  }
+  box.replaceChildren(h('button', { class: 'acct', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': String(!!MENU), 'aria-label': 'Menú de ' + u.name, onclick: () => (MENU ? closeMenu() : openMenu()) },
+    avatarEl(u, 34), h('span', { class: 'burger', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
+    u.password && !u.verified ? h('em', { class: 'dot', title: 'Confirmá tu correo' }) : ''));
+}
+
 /* ---------- acceso: ingreso, registro y nombre de usuario ---------- */
 const LOGO_SVG = '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="lgw" gradientUnits="userSpaceOnUse" x1="5" y1="5" x2="43" y2="43"><stop offset="0" stop-color="#2be3f2"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient></defs><path d="M24 5C13 5 5 12.6 5 22.4c0 5.2 2.4 9.7 6.2 12.8L9 43l8.3-4.1c2 .6 4.2.9 6.7.9 11 0 19-7.6 19-17.4S35 5 24 5z" fill="none" stroke="url(#lgw)" stroke-width="3" stroke-linejoin="round"/><g fill="none" stroke="url(#lgw)" stroke-width="3" stroke-linecap="round"><path class="b" d="M16 20v6"/><path class="b" d="M21 15v16"/><path class="b" d="M26 12v22"/><path class="b" d="M31 17v12"/><path class="b" d="M36 21v4"/></g></svg>';
 const G_SVG = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
@@ -274,7 +341,7 @@ function buildHome() {
     ui.sres.replaceChildren(h('span', { class: 'hint' }, 'Buscando…'));
     try {
       const rows = await music.itunesSearch(term);
-      S.recs = rows.map((r) => ({ title: r.title, artist: r.artist, genre: r.genre, moods: [] })); S.recNote = 'Resultados de tu búsqueda';
+      S.recs = rows.map((r) => ({ title: r.title, artist: r.artist, genre: r.genre, cover: r.cover, moods: [] })); S.recNote = 'Resultados de tu búsqueda';
       ui.sres.replaceChildren(S.recs.length ? '' : h('span', { class: 'hint' }, 'Sin resultados.')); renderResults();
       if (S.recs.length) ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (_) { ui.sres.replaceChildren(h('span', { class: 'hint' }, 'No se pudo buscar ahora.')); }
@@ -342,15 +409,24 @@ function watchAccount(uid) {
   S.offPlan = store.watchPlan(uid, (p) => { S.premium = p; renderPlan(); });
   S.offFavs = store.watchFavorites(uid, (f) => { S.favs = f; renderPlan(); });
 }
+function coverBox(r) {
+  const box = h('div', { class: 'rc-cover', 'aria-hidden': 'true', vars: { '--a': hue(r.title + r.artist) } }, h('b', {}, (r.title || '?').trim().charAt(0).toUpperCase()));
+  const set = (u) => {
+    if (!u) return;
+    const im = h('img', { src: u, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer', onload: () => box.classList.add('ok'), onerror: () => im.remove() });
+    box.append(im);
+  };
+  if (r.cover) set(String(r.cover).replace('600x600', '300x300')); else music.coverFor(r.title, r.artist).then((u) => set(u && String(u).replace('600x600', '300x300')));
+  return box;
+}
 function renderResults() {
   const box = S.ui.results; if (!box) return;
   if (!S.recs || !S.recs.length) { box.replaceChildren(); return; }
   box.replaceChildren(
     h('div', { class: 'section-title' }, h('h2', {}, S.recNote === TODAY_NOTE ? 'Para tu ánimo hoy' : 'Para vos'), h('span', { class: 'source' }, S.recNote)),
     h('div', { class: 'grid' }, S.recs.map((r) => h('button', { class: 'card', type: 'button', onclick: () => openTrack(r) },
+      h('div', { class: 'rc-top' }, coverBox(r), h('div', { class: 'rc-txt' }, h('h3', {}, r.title), h('div', { class: 'by' }, [r.artist, r.genre].filter(Boolean).join(' · ')))),
       wave(slugify(r.artist, r.title)),
-      h('h3', {}, r.title),
-      h('div', { class: 'by' }, [r.artist, r.genre].filter(Boolean).join(' · ')),
       h('div', { class: 'tags' }, (r.moods || []).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
       r.reason && h('div', { class: 'why' }, r.reason),
       h('div', { class: 'foot' }, h('span', { class: 'stat' }, 'Foro de la canción'), h('span', { class: 'go' }, 'Entrar al foro →'))))));
@@ -493,8 +569,10 @@ window.addEventListener('resize', () => fitNames(document)); async function load
   const head = (cover) => [h('div', { class: 'cover' }, cover ? h('img', { src: cover, alt: `Portada de ${t.title}`, referrerpolicy: 'no-referrer' }) : t.title.trim().charAt(0).toUpperCase()),
     h('div', { class: 'names' }, h('div', { class: 'tt mq' }, h('span', {}, t.title)), h('div', { class: 'sm mq' }, h('span', {}, t.artist)))];
   paint([...head(null), h('div', { class: 'sm', role: 'status' }, 'Buscando la canción…')]);
+  const early = music.coverFor(t.title, t.artist);
+  early.then((u) => { const c = aside.querySelector('.cover'); if (u && c && !c.querySelector('img')) c.replaceChildren(h('img', { src: u, alt: 'Portada de ' + t.title, referrerpolicy: 'no-referrer' })); });
   const p = await music.playback(t.title, t.artist);
-  const kids = head(p.cover);
+  const kids = head(p.cover || await early);
   if (p.kind === 'spotify' && /^[A-Za-z0-9]{22}$/.test(p.spotifyId)) {
     kids.push(h('iframe', { src: `https://open.spotify.com/embed/track/${p.spotifyId}?utm_source=generator&theme=0`, height: '152', title: 'Reproductor de Spotify', allow: 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture', loading: 'lazy' }),
       h('div', { class: 'sm' }, p.premium ? 'Spotify Premium: canción completa.' : 'Cuenta gratuita de Spotify: puede sonar solo un fragmento.'));
