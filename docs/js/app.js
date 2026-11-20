@@ -73,15 +73,15 @@ function wave(seed) {
   for (let i = 0; i < 28; i++) { x = (x * 1103515245 + 12345) >>> 0; bars.push(h('span', { vars: { '--h': 25 + (x % 76), '--i': i } })); }
   return h('div', { class: 'wave', 'aria-hidden': 'true' }, bars);
 }
-function leaveForum() { if (S.off) { S.off(); S.off = null; } S.slug = null; S.data = null; }
+function leaveForum() { if (S.off) { S.off(); S.off = null; } if (F.off) { F.off(); F.off = null; } S.slug = null; S.data = null; }
 function buildHome() {
   leaveForum();
-  const chips = MOODS.map((m) => h('button', { class: 'chip', type: 'button', 'aria-pressed': String(S.picked.has(m)),
+  const chips = MOODS.map((m) => h('button', { class: 'chip mood', type: 'button', vars: { '--mc': moodColor(m) }, 'aria-pressed': String(S.picked.has(m)),
     onclick: (e) => { S.picked.has(m) ? S.picked.delete(m) : S.picked.add(m); e.currentTarget.setAttribute('aria-pressed', String(S.picked.has(m))); } }, moodLabel(m)));
   const ta = h('textarea', { id: 'feel', maxlength: '300', placeholder: 'Ej: Terminé un examen difícil y quiero algo para celebrar. Me gusta el rock en español.' });
   ta.value = S.text; ta.addEventListener('input', () => { S.text = ta.value; });
   const sq = h('input', { type: 'text', id: 'sq', maxlength: '80', placeholder: 'Ej: Gustavo Cerati Crimen' });
-  const ui = S.ui = { results: h('div'), trend: h('div'), sres: h('div', { class: 'sresults' }), favs: h('div') };
+  const ui = S.ui = { results: h('div'), trend: h('div'), sres: h('div', { class: 'sresults' }) };
   const go = h('button', { class: 'btn', type: 'button', onclick: () => { S.recs = recommend([...S.picked], S.text, S.premium ? PREMIUM_RECS : FREE_RECS); S.recNote = S.premium ? 'Elegidas según tu ánimo' : `Elegidas según tu ánimo · el plan Premium muestra hasta ${PREMIUM_RECS}`; renderResults(); ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Recomendarme canciones');
   const sgo = h('button', { class: 'btn ghost', type: 'button', onclick: async () => {
     const term = sq.value.trim(); if (term.length < 2) return;
@@ -104,11 +104,11 @@ function buildHome() {
       h('div', {}, h('label', { class: 'lbl', for: 'feel' }, 'O contalo con tus palabras'), ta),
       h('div', { class: 'row' }, go),
       h('div', {}, h('label', { class: 'lbl', for: 'sq' }, 'O buscá cualquier canción o artista'), h('div', { class: 'search' }, sq, sgo), ui.sres)),
-    ui.results, ui.favs,
+    ui.results,
     adBox(),
     h('div', { class: 'section-title' }, h('h2', {}, 'Foros recientes')), ui.trend);
   S.spotifyMsg = '';
-  renderResults(); renderFavs();
+  renderResults();
   ui.trend.replaceChildren(h('div', { class: 'empty' }, 'Cargando foros…'));
   if (S.offRecent) S.offRecent();
   S.offRecent = store.watchRecentForums((forums) => {
@@ -124,6 +124,7 @@ function adBox() {
     h('span', {}, h('b', {}, 'Anuncio'), ' · Espacio publicitario del plan gratuito.'), h('span', {}, 'Con Premium no ves anuncios.'));
 }
 function renderFavs() {
+  if (S.ui && S.ui.fbody) { renderFavsPage(); return; }
   const box = S.ui && S.ui.favs; if (!box) return;
   if (!S.premium || !S.favs.length) { box.replaceChildren(); return; }
   box.replaceChildren(h('div', { class: 'section-title' }, h('h2', {}, 'Mis favoritos'), h('span', { class: 'source' }, 'Plan Premium')),
@@ -323,12 +324,125 @@ window.addEventListener('resize', () => fitNames(document)); async function load
   paint(kids);
 }
 
+/* ---------- navegación, foros (feed) y favoritos ---------- */
+const MOOD_COLOR = { feliz: '#ffd166', triste: '#6c8cff', energico: '#ff7a45', relajado: '#4fe3b1', nostalgico: '#c79bff', romantico: '#ff5fa2', motivado: '#2be3f2', intenso: '#ff4d6d', reflexivo: '#9fb3c8' };
+const F = { off: null, forums: [], threads: [], tab: 'recientes', song: null, ready: false };
+function moodColor(m) { return MOOD_COLOR[moodLabel(m).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')] || '#7c5cff'; }
+function hue(seed) { let x = 0; for (const c of String(seed)) x = (x * 31 + c.charCodeAt(0)) >>> 0; return x % 360; }
+function paintNav(hash) {
+  const cur = hash === 'foros' || /^foro-/.test(hash) ? 'foros' : hash === 'favoritos' ? 'favoritos' : 'inicio';
+  $('#nav').replaceChildren(...[['inicio', 'Descubrir'], ['foros', 'Foros'], ['favoritos', 'Favoritos']].map(([k, v]) =>
+    h('a', { href: '#' + k, 'aria-current': k === cur ? 'page' : null }, v)));
+}
+function tweet(t) {
+  const same = !t.body || t.body.indexOf(t.title) === 0;
+  return h('article', { class: 'tw' },
+    h('span', { class: 'av', 'aria-hidden': 'true' }, (t.author || '?').charAt(0).toUpperCase()),
+    h('div', { class: 'tw-main' },
+      h('div', { class: 'tw-head' }, h('b', {}, t.author || 'Oyente'), t.premium && h('span', { class: 'badge' }, 'Premium'),
+        h('a', { class: 'songchip', href: '#foro-' + t.slug, title: 'Ir al foro de ' + t.ftitle }, '♪ ' + t.ftitle, h('span', {}, ' · ' + t.fartist)),
+        h('span', { class: 'when' }, ago(t.createdAt))),
+      h('div', { class: 'tw-body' }, same ? (t.body || t.title) : [h('b', { class: 'tw-title' }, t.title), h('br'), t.body]),
+      h('div', { class: 'tags' }, h('span', { class: 'tag' }, CATS[t.category] || 'Debate'), (t.fmoods || []).slice(0, 2).map((m) => h('span', { class: 'tag' }, moodLabel(m))))));
+}
+function renderFeed() {
+  const ui = S.ui; if (!ui || !ui.feed) return;
+  ui.tabs.replaceChildren(...[['recientes', 'Recientes'], ['animo', 'Mi ánimo'], ['mias', 'Mis canciones']].map(([k, v]) =>
+    h('button', { class: 'tab', type: 'button', role: 'tab', 'aria-selected': String(F.tab === k), onclick: () => { F.tab = k; renderFeed(); } }, v)));
+  let list = F.threads, note = '';
+  if (F.tab === 'animo') { if (!S.picked.size) note = 'Elegí tus ánimos en Descubrir para ver hilos que combinan con vos.'; else list = list.filter((t) => (t.fmoods || []).some((m) => S.picked.has(m))); }
+  if (F.tab === 'mias') { const own = new Set(S.favs.map((f) => f.slug)); list = list.filter((t) => own.has(t.slug) || (S.user && t.uid === S.user.uid)); }
+  ui.feed.replaceChildren(...(note ? [h('div', { class: 'empty' }, note)] : list.length ? list.map(tweet)
+    : [h('div', { class: 'empty' }, F.ready ? 'Todavía no hay hilos acá. Elegí una canción y abrí la charla.' : 'Cargando hilos…')]));
+  ui.side.replaceChildren(...(F.forums.length ? F.forums.slice(0, 6).map((f) => h('a', { class: 'sidesong', href: '#foro-' + f.slug }, h('b', {}, f.title), h('small', {}, f.artist)))
+    : [h('span', { class: 'hint' }, 'Sin foros todavía.')]));
+  ui.quick.replaceChildren(...F.forums.slice(0, 6).map((f) => h('button', { class: 'sr-item', type: 'button',
+    onclick: () => ui.setSong({ title: f.title, artist: f.artist, genre: f.genre || '', moods: f.moods || [], slug: f.slug }) }, h('b', {}, f.title), ' · ', f.artist)));
+}
+function buildFeed() {
+  leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; }
+  F.song = null; F.threads = []; F.forums = []; F.ready = false;
+  const ui = S.ui = { feed: h('div', { class: 'tweets' }), side: h('div', { class: 'songs' }), tabs: h('div', { class: 'tabs', role: 'tablist' }), pick: h('div', { class: 'pickbox', hidden: true }), chip: h('div'), quick: h('div', { class: 'sresults' }) };
+  const ta = h('textarea', { id: 'fx', maxlength: '600', placeholder: S.user ? '¿Qué estás escuchando? Contale a la comunidad.' : 'Iniciá sesión para publicar', disabled: !S.user });
+  const msg = h('div', { role: 'status', class: 'hint' });
+  const sq = h('input', { type: 'text', maxlength: '80', placeholder: 'Buscá una canción o artista', 'aria-label': 'Buscar canción' });
+  const sres = h('div', { class: 'sresults' });
+  const setSong = (s) => {
+    F.song = s; ui.pick.hidden = true;
+    ui.chip.replaceChildren(s ? h('span', { class: 'songchip' }, '♪ ' + s.title, h('span', {}, ' · ' + s.artist), h('button', { class: 'x', type: 'button', 'aria-label': 'Quitar canción', onclick: () => setSong(null) }, '×')) : '');
+  };
+  ui.setSong = setSong;
+  const find = async () => {
+    const term = sq.value.trim(); if (term.length < 2) return;
+    sres.replaceChildren(h('span', { class: 'hint' }, 'Buscando…'));
+    try {
+      const rows = await music.itunesSearch(term);
+      sres.replaceChildren(...(rows.length ? rows.slice(0, 6).map((r) => h('button', { class: 'sr-item', type: 'button',
+        onclick: () => setSong({ title: r.title, artist: r.artist, genre: r.genre || '', moods: [], slug: slugify(r.artist, r.title) }) }, h('b', {}, r.title), ' · ', r.artist)) : [h('span', { class: 'hint' }, 'Sin resultados.')]));
+    } catch (_) { sres.replaceChildren(h('span', { class: 'hint' }, 'No se pudo buscar ahora.')); }
+  };
+  sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') find(); });
+  ui.pick.append(h('div', { class: 'search' }, sq, h('button', { class: 'btn ghost small', type: 'button', onclick: find }, 'Buscar')), sres, h('div', { class: 'hint' }, 'O elegí un foro reciente:'), ui.quick);
+  const choose = h('button', { class: 'songbtn', type: 'button', disabled: !S.user, onclick: () => { ui.pick.hidden = !ui.pick.hidden; if (!ui.pick.hidden) sq.focus(); } }, '♪ Elegir canción');
+  const send = h('button', { class: 'btn', type: 'button', disabled: !S.user }, 'Publicar');
+  send.addEventListener('click', async () => {
+    const text = ta.value.trim();
+    if (text.length < 3) { msg.textContent = 'Escribí algo para publicar.'; return; }
+    if (!F.song) { msg.textContent = 'Elegí la canción de la que querés hablar.'; return; }
+    send.disabled = true; msg.textContent = '';
+    try {
+      const s = F.song;
+      await store.ensureForum(S.user, { slug: s.slug, title: s.title.slice(0, 80), artist: s.artist.slice(0, 60), genre: (s.genre || '').slice(0, 40), moods: (s.moods || []).slice(0, 4) });
+      await store.addThread(S.user, s.slug, 'debate', text.split('\n')[0].slice(0, 120), text, S.premium);
+      ta.value = ''; setSong(null);
+    } catch (e) { msg.textContent = errMsg(e); } finally { send.disabled = !S.user; }
+  });
+  view.replaceChildren(h('div', { class: 'feedpage' },
+    h('section', { class: 'feedcol' },
+      h('div', { class: 'pagehead' }, h('h1', {}, 'Foros'), h('p', { class: 'lead' }, 'Lo que se dice sobre la música, en un solo lugar.')),
+      ui.tabs,
+      h('div', { class: 'compose-box' }, h('span', { class: 'av me', 'aria-hidden': 'true' }, S.user ? S.user.name.charAt(0).toUpperCase() : '?'),
+        h('div', { class: 'cb-main' }, h('label', { class: 'sr', for: 'fx' }, 'Nuevo hilo'), ta, ui.chip, ui.pick, msg, h('div', { class: 'row cb-actions' }, choose, h('span', { class: 'grow' }), send))),
+      ui.feed),
+    h('aside', { class: 'sidecol', 'aria-label': 'Canciones en conversación' }, h('h2', {}, 'Canciones en conversación'), ui.side)));
+  renderFeed();
+  F.off = store.watchFeed((d) => { if (S.ui !== ui) return; F.forums = d.forums; F.threads = d.threads; F.ready = true; renderFeed(); },
+    () => { if (S.ui === ui) { F.ready = true; ui.feed.replaceChildren(h('div', { class: 'empty' }, 'No se pudieron cargar los hilos.')); } });
+}
+function buildFavs() {
+  leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; }
+  S.ui = { fbody: h('div') }; S.favMood = S.favMood || 'todas';
+  view.replaceChildren(h('section', { class: 'pagehead' }, h('span', { class: 'eyebrow' }, 'Premium'), h('h1', {}, 'Tus favoritos'), h('p', { class: 'lead' }, 'Las canciones que guardaste, listas para volver a su foro.')), S.ui.fbody);
+  renderFavsPage();
+}
+function renderFavsPage() {
+  const box = S.ui && S.ui.fbody; if (!box) return;
+  if (!S.user) { box.replaceChildren(h('div', { class: 'empty' }, 'Iniciá sesión para guardar y ver tus favoritos.')); return; }
+  if (!S.premium) { box.replaceChildren(h('div', { class: 'lock' }, h('span', { class: 'badge' }, 'Premium'), h('h2', {}, 'Los favoritos son parte del plan Premium'),
+    h('p', {}, 'Guardá las canciones que más te gustan y volvé a sus foros cuando quieras. Además, sin anuncios y con más recomendaciones.'))); return; }
+  if (!S.favs.length) { box.replaceChildren(h('div', { class: 'empty' }, 'Todavía no guardaste canciones. Tocá "Guardar en favoritos" dentro del foro de una canción.')); return; }
+  const moods = [...new Set(S.favs.flatMap((f) => f.moods || []))];
+  if (S.favMood !== 'todas' && !moods.includes(S.favMood)) S.favMood = 'todas';
+  const shown = S.favs.filter((f) => S.favMood === 'todas' || (f.moods || []).includes(S.favMood));
+  box.replaceChildren(
+    h('div', { class: 'chips favfilter' }, [['todas', 'Todas'], ...moods.map((m) => [m, moodLabel(m)])].map(([k, v]) =>
+      h('button', { class: 'chip', type: 'button', 'aria-pressed': String(S.favMood === k), onclick: () => { S.favMood = k; renderFavsPage(); } }, v))),
+    h('div', { class: 'favgrid' }, shown.map((f) => h('article', { class: 'favcard' },
+      h('div', { class: 'favcover', vars: { '--a': hue(f.slug), '--b': (hue(f.slug) + 70) % 360 } },
+        h('button', { class: 'unfav', type: 'button', 'aria-label': 'Quitar ' + f.title + ' de favoritos', onclick: () => store.toggleFavorite(S.user.uid, f, true).catch(() => {}) }, '♥')),
+      h('h3', { class: 'fav-t' }, f.title), h('div', { class: 'by' }, [f.artist, f.genre].filter(Boolean).join(' · ')),
+      h('div', { class: 'tags' }, (f.moods || []).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
+      h('a', { class: 'btn small favgo', href: '#foro-' + f.slug }, 'Abrir foro →')))));
+}
+
 /* ---------- rutas y arranque ---------- */
 function route() {
   paintAccount();
   if (!S.ready) return;
-  if (!S.user && !S.guest) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } return buildGate(); }
-  const hash = location.hash.slice(1);
+  if (!S.user && !S.guest) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return buildGate(); }
+  const hash = location.hash.slice(1); paintNav(hash);
+  if (hash === 'foros') return buildFeed();
+  if (hash === 'favoritos') return buildFavs();
   if (/^foro-[a-z0-9-]{1,80}$/.test(hash)) { const slug = hash.slice(5); if (S.slug !== slug || !S.data) buildForum(slug); return; }
   buildHome();
 }
