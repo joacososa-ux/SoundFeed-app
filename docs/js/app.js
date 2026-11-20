@@ -1,6 +1,7 @@
 import * as store from './store.js?v=12';
 import * as music from './music.js?v=13';
 import { recommend, seedThreads, slugify, LABEL, MOODS } from './recommend.js?v=12';
+import * as fx from './fx.js?v=1';
 
 const CATS = { letra: 'Análisis de letra', debate: 'Debate', anecdotas: 'Anécdotas', similares: 'Si te gusta esto' };
 const $ = (s, el) => (el || document).querySelector(s);
@@ -31,6 +32,17 @@ function h(tag, props, ...kids) {
   return el;
 }
 const moodLabel = (id) => LABEL[id] || id;
+// Íconos de línea (mismo trazo en toda la app). Devuelve un <span class="ic"> con el SVG.
+const ICON = {
+  heart: '<path d="M12 20.5S3.5 15.4 3.5 9.2A4.6 4.6 0 0 1 12 6.8a4.6 4.6 0 0 1 8.5 2.4c0 6.2-8.5 11.3-8.5 11.3z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>',
+  card: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/>',
+  star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
+  out: '<path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+};
+function ico(name, cls) { const s = document.createElement('span'); s.className = 'ic' + (cls ? ' ' + cls : ''); s.setAttribute('aria-hidden', 'true'); s.innerHTML = '<svg viewBox="0 0 24 24">' + ICON[name] + '</svg>'; return s; }
+const ambEl = () => { const a = document.createElement('div'); a.className = 'amb'; a.setAttribute('aria-hidden', 'true'); a.innerHTML = '<i class="o a"></i><i class="o b"></i><i class="o c"></i>'; return a; };
 function ago(ts) {
   const m = Math.round((Date.now() - ts) / 60000);
   if (m < 1) return 'recién';
@@ -51,29 +63,30 @@ function avatarEl(u, size) {
 }
 let MENU = null, SHEET = null;
 function menuKey(e) { if (e.key === 'Escape') { if (SHEET) closeSheet(); else closeMenu(); } }
+function leave(el) { el.classList.add('out'); setTimeout(() => el.remove(), 260); }
 function closeMenu() {
   if (!MENU) return;
-  MENU.remove(); MENU = null; document.removeEventListener('keydown', menuKey);
+  leave(MENU); MENU = null; if (!SHEET) document.removeEventListener('keydown', menuKey);
   const b = $('.acct'); if (b) b.setAttribute('aria-expanded', 'false');
 }
-function closeSheet() { if (!SHEET) return; SHEET.remove(); SHEET = null; document.body.classList.remove('noscroll'); if (!MENU) document.removeEventListener('keydown', menuKey); }
+function closeSheet(now) { if (!SHEET) return; if (now === true) SHEET.remove(); else leave(SHEET); SHEET = null; document.body.classList.remove('noscroll'); if (!MENU) document.removeEventListener('keydown', menuKey); }
 function openMenu() {
   const u = S.user; if (!u) return;
-  const item = (label, sub, fn) => h('button', { class: 'mi', type: 'button', role: 'menuitem', onclick: fn }, h('span', {}, label), sub ? h('small', {}, sub) : '');
+  const item = (label, sub, fn, icon, i) => h('button', { class: 'mi', type: 'button', role: 'menuitem', onclick: fn, vars: { '--i': i } }, ico(icon), h('span', {}, label), sub ? h('small', {}, sub) : '');
   const panel = h('div', { class: 'menu', role: 'menu', 'aria-label': 'Tu cuenta' },
     h('div', { class: 'mhead' }, avatarEl(u, 44), h('div', {}, h('b', {}, '@' + u.name), h('small', {}, S.premium ? 'Plan Premium' : 'Plan gratuito'))),
-    item('Perfil', '', () => openSheet('perfil')),
-    item('Cuenta', '', () => openSheet('cuenta')),
-    item('Plan', S.premium ? 'Premium' : 'Gratuito', () => openSheet('plan')),
+    item('Perfil', '', () => openSheet('perfil'), 'user', 0),
+    item('Cuenta', '', () => openSheet('cuenta'), 'card', 1),
+    item('Plan', S.premium ? 'Premium' : 'Gratuito', () => openSheet('plan'), 'star', 2),
     h('div', { class: 'msep' }),
-    h('button', { class: 'mi danger', type: 'button', role: 'menuitem', onclick: () => { closeMenu(); store.logout(); } }, 'Cerrar sesión'));
+    h('button', { class: 'mi danger', type: 'button', role: 'menuitem', vars: { '--i': 3 }, onclick: () => { closeMenu(); store.logout(); } }, ico('out'), h('span', {}, 'Cerrar sesión')));
   MENU = h('div', { class: 'menu-back', onclick: (e) => { if (e.target === MENU) closeMenu(); } }, panel);
   document.body.append(MENU); document.addEventListener('keydown', menuKey);
   const b = $('.acct'); if (b) b.setAttribute('aria-expanded', 'true');
   const f = panel.querySelector('.mi'); if (f) f.focus();
 }
 function openSheet(kind) {
-  closeMenu(); closeSheet();
+  closeMenu(); closeSheet(true);
   const u = S.user; if (!u) return;
   const row = (k, v) => h('div', { class: 'srow' }, h('span', {}, k), h('b', {}, v));
   const msg = h('p', { class: 'snote', role: 'status' });
@@ -93,8 +106,12 @@ function openSheet(kind) {
       if (!u.verified) acts.push(mail('Reenviar correo de confirmación', () => store.resendVerification(), 'Te mandamos el correo de confirmación.'));
       acts.push(mail('Cambiar contraseña', () => store.resetPassword(u.email), 'Te mandamos un enlace para cambiar la contraseña.'));
     }
+    const sw = h('button', { class: 'sw', type: 'button', role: 'switch', 'aria-checked': String(fx.isGlass()), 'aria-label': 'Cristal líquido' }, h('i'));
+    sw.addEventListener('click', () => { const on = !fx.isGlass(); fx.setGlass(on); sw.setAttribute('aria-checked', String(on)); msg.textContent = on ? 'Cristal líquido activado.' : 'Cristal líquido desactivado: la app usa superficies sólidas.'; msg.classList.add('toast'); });
     body = [row('Correo', u.email || '—'), row('Ingreso con', u.password ? 'Correo y contraseña' : 'Google'),
-      u.password ? row('Correo confirmado', u.verified ? 'Sí' : 'Todavía no') : '', acts.length ? h('div', { class: 'sacts' }, acts) : '', msg];
+      u.password ? row('Correo confirmado', u.verified ? 'Sí' : 'Todavía no') : '',
+      h('div', { class: 'srow' }, h('span', { class: 'lbl' }, 'Cristal líquido', h('small', {}, 'Efecto de vidrio en toda la app')), sw),
+      acts.length ? h('div', { class: 'sacts' }, acts) : '', msg];
   } else {
     title = 'Plan';
     body = [h('div', { class: 'splan' }, h('b', {}, S.premium ? 'Premium' : 'Gratuito'), h('small', {}, S.premium ? 'Tenés todo desbloqueado.' : 'Tu plan actual')),
@@ -107,7 +124,7 @@ function openSheet(kind) {
       S.premium ? '' : h('p', { class: 'snote' }, 'El plan Premium llega pronto.')];
   }
   const sheet = h('section', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-    h('div', { class: 'sheet-head' }, h('h2', {}, title), h('button', { class: 'sheet-x', type: 'button', 'aria-label': 'Cerrar', onclick: closeSheet }, '✕')),
+    h('div', { class: 'sheet-head' }, h('h2', {}, title), h('button', { class: 'sheet-x', type: 'button', 'aria-label': 'Cerrar', onclick: () => closeSheet() }, '✕')),
     h('div', { class: 'sheet-body' }, body));
   SHEET = h('div', { class: 'menu-back sheet-back', onclick: (e) => { if (e.target === SHEET) closeSheet(); } }, sheet);
   document.body.classList.add('noscroll'); document.body.append(SHEET); document.addEventListener('keydown', menuKey);
@@ -116,7 +133,7 @@ function openSheet(kind) {
 function paintAccount() {
   const box = $('#account'), u = S.user;
   if (!u) {
-    closeMenu(); closeSheet();
+    closeMenu(); closeSheet(true);
     box.replaceChildren(store.configured ? h('button', { class: 'btn small', type: 'button', onclick: () => { setGuest(false); route(); } }, 'Entrar') : '');
     return;
   }
@@ -157,7 +174,9 @@ async function resendVerify(e) {
 const AUTH_HTML = '<div class="a-wrap">'
   + '<section class="a-screen" data-s="welcome" aria-label="Acceso">'
   + '<div class="a-brand"><span data-logo></span><span class="a-word">Sound<i>Feed</i></span></div>'
-  + '<div class="a-hero"><h1>Descubrí una canción y <em>entrá a la charla.</em></h1><p>Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, donde la comunidad analiza la letra y debate sobre el artista.</p></div>'
+  + '<div class="a-fan" aria-hidden="true"><div class="a-tile t1" style="--h1:38;--h2:12"></div><div class="a-tile t3" style="--h1:205;--h2:255"></div><div class="a-tile t2" style="--h1:265;--h2:325">♪</div>'
+  + '<div class="a-bub b1"><i></i><i></i><i></i> ¿La escuchan de noche?</div><div class="a-bub b2">Ese solo final</div></div>'
+  + '<div class="a-hero"><h1><span class="w" style="--k:0">Descubrí</span> <span class="w" style="--k:1">una</span> <span class="w" style="--k:2">canción</span> <span class="w" style="--k:3">y</span> <em class="w" style="--k:4">entrá a la charla.</em></h1><p>Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, donde la comunidad analiza la letra y debate sobre el artista.</p></div>'
   + '<div class="a-grow"></div>'
   + '<div class="a-actions"><div class="a-err" role="alert"></div>'
   + '<button type="button" class="a-btn primary" data-go="login">Iniciar sesión</button>'
@@ -168,28 +187,28 @@ const AUTH_HTML = '<div class="a-wrap">'
   + '<p class="a-legal">Al continuar aceptás los términos y la política de privacidad.</p>'
   + '</section>'
   + '<section class="a-screen" data-s="signup" aria-label="Registro">'
-  + '<button type="button" class="a-back" data-go="welcome">← Volver</button>'
+  + '<button type="button" class="a-back" data-go="welcome"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Volver</button>'
   + '<div class="a-steps" aria-hidden="true"><i class="on"></i><i></i></div>'
   + '<h2 class="a-title">Creá tu cuenta</h2>'
   + '<p class="a-sub">Con tu correo y una contraseña segura. Después elegís cómo te llamamos.</p>'
   + '<form id="a-fsignup" novalidate>'
-  + '<div class="a-field"><label for="a-se">Correo electrónico</label><div class="a-in"><input id="a-se" type="email" autocomplete="email" inputmode="email" placeholder="tucorreo@ejemplo.com" required></div><div class="a-hint" id="a-seh"></div></div>'
-  + '<div class="a-field"><label for="a-sp">Contraseña</label><div class="a-in"><input id="a-sp" type="password" autocomplete="new-password" placeholder="Al menos 10 caracteres" required><button type="button" class="a-eye" data-eye="a-sp">Ver</button></div>'
+  + '<div class="a-field"><div class="a-in"><input id="a-se" type="email" autocomplete="email" inputmode="email" placeholder=" " required><label for="a-se">Correo electrónico</label><svg class="a-chk" viewBox="0 0 24 24" aria-hidden="true"><circle class="ring" cx="12" cy="12" r="10"/><path pathLength="1" d="M7 12.5l3.5 3.5L17 9"/></svg></div><div class="a-hint" id="a-seh"></div></div>'
+  + '<div class="a-field"><div class="a-in"><input id="a-sp" type="password" autocomplete="new-password" placeholder=" " required><label for="a-sp">Contraseña</label><button type="button" class="a-eye" data-eye="a-sp">Ver</button></div>'
   + '<div class="a-meter" id="a-meter" data-s="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>'
-  + '<ul class="a-rules" id="a-rules"><li data-r="len">10 caracteres o más</li><li data-r="mix">Mayúsculas, minúsculas y un número</li><li data-r="common">No es una contraseña común ni tu correo</li></ul></div>'
-  + '<div class="a-field"><label for="a-sp2">Repetí la contraseña</label><div class="a-in"><input id="a-sp2" type="password" autocomplete="new-password" placeholder="Otra vez, para evitar errores" required><button type="button" class="a-eye" data-eye="a-sp2">Ver</button></div><div class="a-hint" id="a-sp2h"></div></div>'
+  + '<ul class="a-rules" id="a-rules"><li data-r="len"><i class="dotc"><svg class="ck" viewBox="0 0 24 24"><path pathLength="1" d="M4.5 12.5l5 5L19.5 7"/></svg></i>10 caracteres o más</li><li data-r="mix"><i class="dotc"><svg class="ck" viewBox="0 0 24 24"><path pathLength="1" d="M4.5 12.5l5 5L19.5 7"/></svg></i>Mayúsculas, minúsculas y un número</li><li data-r="common"><i class="dotc"><svg class="ck" viewBox="0 0 24 24"><path pathLength="1" d="M4.5 12.5l5 5L19.5 7"/></svg></i>No es una contraseña común ni tu correo</li></ul></div>'
+  + '<div class="a-field"><div class="a-in"><input id="a-sp2" type="password" autocomplete="new-password" placeholder=" " required><label for="a-sp2">Repetí la contraseña</label><button type="button" class="a-eye" data-eye="a-sp2">Ver</button></div><div class="a-hint" id="a-sp2h"></div></div>'
   + '<div class="a-err" role="alert"></div>'
   + '<button class="a-btn primary" id="a-sbtn" disabled>Crear cuenta</button>'
   + '</form>'
   + '<p class="a-small">Te mandamos un correo para confirmar tu dirección. Tu contraseña se guarda cifrada y nadie del equipo puede verla.</p>'
   + '</section>'
   + '<section class="a-screen" data-s="login" aria-label="Iniciar sesión">'
-  + '<button type="button" class="a-back" data-go="welcome">← Volver</button>'
+  + '<button type="button" class="a-back" data-go="welcome"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Volver</button>'
   + '<h2 class="a-title">Qué bueno verte de nuevo</h2>'
   + '<p class="a-sub">Entrá con tu correo y contraseña.</p>'
   + '<form id="a-flogin" novalidate>'
-  + '<div class="a-field"><label for="a-le">Correo electrónico</label><div class="a-in"><input id="a-le" type="email" autocomplete="email" inputmode="email" placeholder="tucorreo@ejemplo.com"></div></div>'
-  + '<div class="a-field"><label for="a-lp">Contraseña</label><div class="a-in"><input id="a-lp" type="password" autocomplete="current-password" placeholder="Tu contraseña"><button type="button" class="a-eye" data-eye="a-lp">Ver</button></div>'
+  + '<div class="a-field"><div class="a-in"><input id="a-le" type="email" autocomplete="email" inputmode="email" placeholder=" "><label for="a-le">Correo electrónico</label></div></div>'
+  + '<div class="a-field"><div class="a-in"><input id="a-lp" type="password" autocomplete="current-password" placeholder=" "><label for="a-lp">Contraseña</label><button type="button" class="a-eye" data-eye="a-lp">Ver</button></div>'
   + '<button type="button" class="a-link" id="a-forgot">¿Te olvidaste la contraseña?</button></div>'
   + '<div class="a-err" role="alert"></div>'
   + '<button class="a-btn primary" id="a-lbtn">Entrar</button>'
@@ -200,6 +219,7 @@ const AUTH_HTML = '<div class="a-wrap">'
   + '</section>'
   + '<section class="a-screen" data-s="name" aria-label="Nombre de usuario">'
   + '<div class="a-steps" aria-hidden="true" style="margin-top:14px"><i class="on"></i><i class="on"></i></div>'
+  + '<div class="a-uav empty" id="a-uav" aria-hidden="true">?</div>'
   + '<h2 class="a-title big">¿Cómo querés que te llamemos?</h2>'
   + '<p class="a-sub">Es el nombre que van a ver los demás en los foros. Elegilo con cuidado: por ahora no se puede cambiar.</p>'
   + '<div class="a-namewrap"><div class="a-namebox" id="a-nbox"><span class="a-at">@</span><input id="a-nin" type="text" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="tu_nombre" aria-describedby="a-nstat"><span class="a-state" id="a-nstate" aria-hidden="true"></span></div>'
@@ -217,7 +237,7 @@ function setScreen(s) {
 }
 function buildAuth() {
   const el = h('div', { class: 'auth', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Acceso a SoundFeed' });
-  el.innerHTML = AUTH_HTML; A.el = el;
+  el.innerHTML = AUTH_HTML; A.el = el; el.prepend(ambEl());
   const q = (s) => el.querySelector(s);
   const say = (msg, ok) => { const n = q('.a-screen.on .a-err'); if (!n) return; n.textContent = msg || ''; n.classList.toggle('ok', !!ok); };
   el.querySelectorAll('[data-logo]').forEach((n) => n.replaceWith(logoEl()));
@@ -243,9 +263,11 @@ function buildAuth() {
     el.querySelectorAll('#a-rules li').forEach((li) => li.classList.toggle('ok', !!st.r[li.dataset.r]));
     const badE = !!e && !validEmail(e), eh = q('#a-seh');
     eh.textContent = badE ? 'Revisá el correo: parece que le falta algo.' : ''; eh.className = 'a-hint' + (badE ? ' bad' : '');
+    se.closest('.a-field').classList.toggle('good', validEmail(e)); se.closest('.a-field').classList.toggle('bad', badE);
     const same = !!p2 && p === p2, h2 = q('#a-sp2h');
-    h2.textContent = p2 ? (same ? '✓ Coinciden' : 'No coinciden todavía') : ''; h2.className = 'a-hint' + (p2 && !same ? ' bad' : '');
-    sbtn.disabled = A.busy || !(validEmail(e) && st.ok && same);
+    h2.textContent = p2 ? (same ? 'Coinciden' : 'No coinciden todavía') : ''; h2.className = 'a-hint' + (p2 ? (same ? ' ok' : ' bad') : '');
+    const was = sbtn.disabled; sbtn.disabled = A.busy || !(validEmail(e) && st.ok && same);
+    if (was && !sbtn.disabled) { sbtn.classList.remove('enable'); void sbtn.offsetWidth; sbtn.classList.add('enable'); }
   };
   [se, sp, sp2].forEach((i) => i.addEventListener('input', checkSignup));
   q('#a-fsignup').addEventListener('submit', async (e) => {
@@ -275,17 +297,22 @@ function buildAuth() {
   /* nombre de usuario */
   const nin = q('#a-nin'), nbtn = q('#a-nbtn'), nbox = q('#a-nbox');
   const setName = (state, text, cls) => {
-    nbox.className = 'a-namebox ' + (cls || ''); q('#a-nstate').innerHTML = state;
+    nbox.className = 'a-namebox ' + (cls || '');
+    const SVGS = { '✓': '<svg class="a-stt" viewBox="0 0 24 24"><circle class="ring" cx="12" cy="12" r="10"/><path pathLength="1" d="M7 12.5l3.5 3.5L17 9"/></svg>', '✕': '<svg class="a-stt x" viewBox="0 0 24 24"><circle class="ring" cx="12" cy="12" r="10"/><path pathLength="1" d="M8.5 8.5l7 7M15.5 8.5l-7 7"/></svg>' };
+    q('#a-nstate').innerHTML = SVGS[state] || state;
     const s = q('#a-nstat'); s.textContent = text; s.className = 'a-status ' + (cls || '');
   };
   const suggest = (base) => {
     const box = q('#a-sugg');
     const alts = [base + '_', base + (10 + Math.floor(Math.random() * 89)), 'la_' + base].filter((a) => a.length <= 20);
-    box.replaceChildren(...alts.map((a) => h('button', { type: 'button', onclick: () => { nin.value = a; nin.dispatchEvent(new Event('input')); } }, '@' + a)));
+    box.replaceChildren(...alts.map((a, i) => h('button', { type: 'button', vars: { '--k': i }, onclick: () => { nin.value = a; nin.dispatchEvent(new Event('input')); } }, '@' + a)));
     box.hidden = !alts.length;
   };
+  const uav = q('#a-uav');
   nin.addEventListener('input', () => {
     const raw = nin.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); if (raw !== nin.value) nin.value = raw;
+    const ch = raw ? raw.charAt(0).toUpperCase() : '?';
+    if (uav.textContent !== ch) { uav.textContent = ch; uav.classList.toggle('empty', !raw); uav.classList.remove('pulse'); void uav.offsetWidth; uav.classList.add('pulse'); }
     clearTimeout(A.timer); nbtn.disabled = true; q('#a-sugg').hidden = true; const my = ++A.seq;
     if (!raw) return setName('', 'De 3 a 20 letras, números o guion bajo.');
     if (raw.length < 3) return setName('', 'Necesita al menos 3 caracteres.');
@@ -335,14 +362,14 @@ function buildHome() {
   ta.value = S.text; ta.addEventListener('input', () => { S.text = ta.value; });
   const sq = h('input', { type: 'text', id: 'sq', maxlength: '80', placeholder: 'Ej: Gustavo Cerati Crimen' });
   const ui = S.ui = { results: h('div'), trend: h('div'), sres: h('div', { class: 'sresults' }) };
-  const go = h('button', { class: 'btn', type: 'button', onclick: () => { S.recs = recommend([...S.picked], S.text, S.premium ? PREMIUM_RECS : FREE_RECS); S.recNote = S.premium ? 'Elegidas según tu ánimo' : `Elegidas según tu ánimo · el plan Premium muestra hasta ${PREMIUM_RECS}`; renderResults(); ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Recomendarme canciones');
+  const go = h('button', { class: 'btn cta', type: 'button', onclick: () => { S.recs = recommend([...S.picked], S.text, S.premium ? PREMIUM_RECS : FREE_RECS); S.recNote = S.premium ? 'Elegidas según tu ánimo' : `Elegidas según tu ánimo · el plan Premium muestra hasta ${PREMIUM_RECS}`; renderResults(true); ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 'Recomendarme canciones');
   const sgo = h('button', { class: 'btn ghost', type: 'button', onclick: async () => {
     const term = sq.value.trim(); if (term.length < 2) return;
     ui.sres.replaceChildren(h('span', { class: 'hint' }, 'Buscando…'));
     try {
       const rows = await music.itunesSearch(term);
       S.recs = rows.map((r) => ({ title: r.title, artist: r.artist, genre: r.genre, cover: r.cover, moods: [] })); S.recNote = 'Resultados de tu búsqueda';
-      ui.sres.replaceChildren(S.recs.length ? '' : h('span', { class: 'hint' }, 'Sin resultados.')); renderResults();
+      ui.sres.replaceChildren(S.recs.length ? '' : h('span', { class: 'hint' }, 'Sin resultados.')); renderResults(true);
       if (S.recs.length) ui.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (_) { ui.sres.replaceChildren(h('span', { class: 'hint' }, 'No se pudo buscar ahora.')); }
   } }, 'Buscar');
@@ -384,13 +411,15 @@ function renderFavs() {
       h('span', {}, h('b', {}, f.title), h('br'), h('small', {}, f.artist)), h('small', {}, 'Abrir foro')))));
 }
 function favBtn(t) {
-  const isFav = S.favs.some((f) => f.slug === t.slug);
+  const isFav = S.favs.some((f) => f.slug === t.slug), heart = ico('heart');
+  const lab = h('span', {}, isFav ? 'En favoritos' : S.premium || !S.user ? 'Guardar en favoritos' : 'Favoritos (Premium)');
   const b = h('button', { class: 'fav', type: 'button', 'aria-pressed': String(isFav), disabled: !S.user || !S.premium,
-    title: !S.user ? 'Iniciá sesión' : S.premium ? null : 'Los favoritos son parte del plan Premium' },
-    isFav ? '★ En favoritos' : S.premium || !S.user ? '☆ Guardar en favoritos' : '☆ Favoritos (Premium)');
+    title: !S.user ? 'Iniciá sesión' : S.premium ? null : 'Los favoritos son parte del plan Premium' }, heart, lab);
   b.addEventListener('click', async () => {
-    b.disabled = true;
-    try { await store.toggleFavorite(S.user.uid, t, isFav); } catch (e) { setNotice(errMsg(e), true); b.disabled = false; }
+    b.disabled = true; b.setAttribute('aria-pressed', String(!isFav)); lab.textContent = isFav ? 'Guardar en favoritos' : 'En favoritos';
+    if (!isFav) fx.burst(heart);
+    try { await store.toggleFavorite(S.user.uid, t, isFav); }
+    catch (e) { setNotice(errMsg(e), true); b.disabled = false; b.setAttribute('aria-pressed', String(isFav)); lab.textContent = isFav ? 'En favoritos' : 'Guardar en favoritos'; }
   });
   return b;
 }
@@ -419,7 +448,7 @@ function coverBox(r) {
   if (r.cover) set(String(r.cover).replace('600x600', '300x300')); else music.coverFor(r.title, r.artist).then((u) => set(u && String(u).replace('600x600', '300x300')));
   return box;
 }
-function renderResults() {
+function renderResults(anim) {
   const box = S.ui.results; if (!box) return;
   if (!S.recs || !S.recs.length) { box.replaceChildren(); return; }
   box.replaceChildren(
@@ -430,6 +459,7 @@ function renderResults() {
       h('div', { class: 'tags' }, (r.moods || []).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
       r.reason && h('div', { class: 'why' }, r.reason),
       h('div', { class: 'foot' }, h('span', { class: 'stat' }, 'Foro de la canción'), h('span', { class: 'go' }, 'Entrar al foro →'))))));
+  if (anim) fx.stagger(box, '.grid > *');
 }
 async function openTrack(r) {
   const slug = slugify(r.artist, r.title);
@@ -444,14 +474,14 @@ async function openTrack(r) {
 function buildForum(slug) {
   leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; }
   S.slug = slug; S.cat = 'todo'; S.threadId = null; S.data = null; S.ui = {};
-  view.replaceChildren(h('a', { class: 'back', href: '#inicio' }, '← Volver a las recomendaciones'), h('p', { class: 'hint' }, 'Abriendo el foro…'));
+  view.replaceChildren(h('a', { class: 'back', href: '#inicio' }, ico('back'), 'Volver a las recomendaciones'), h('p', { class: 'hint' }, 'Abriendo el foro…'));
   S.off = store.watchForum(slug, (d) => { if (S.slug !== slug) return; S.data = d; onForumData(); },
-    () => { view.replaceChildren(h('a', { class: 'back', href: '#inicio' }, '← Volver'), h('div', { class: 'notice err', role: 'alert' }, 'No se pudo abrir el foro.')); });
+    () => { view.replaceChildren(h('a', { class: 'back', href: '#inicio' }, ico('back'), 'Volver'), h('div', { class: 'notice err', role: 'alert' }, 'No se pudo abrir el foro.')); });
 }
 function onForumData() {
   const d = S.data;
   if (!d.forum) {
-    view.replaceChildren(h('a', { class: 'back', href: '#inicio' }, '← Volver'),
+    view.replaceChildren(h('a', { class: 'back', href: '#inicio' }, ico('back'), 'Volver'),
       h('div', { class: 'notice' }, S.user ? 'Este foro todavía no existe. Volvé al inicio y entrá desde una canción para abrirlo.' : 'Este foro todavía no existe. Iniciá sesión para abrirlo.'));
     S.ui = {}; return;
   }
@@ -464,7 +494,7 @@ function buildForumShell() {
   ui.stat = h('div', { class: 'meta' }); ui.cats = h('div', { class: 'cats', role: 'group', 'aria-label': 'Filtrar hilos' });
   ui.list = h('div', { class: 'threads' }); ui.detail = h('div', { class: 'panel' }); ui.newBox = h('div'); ui.aside = h('aside', { 'aria-label': 'Reproductor' }); ui.favBox = h('div');
   view.replaceChildren(
-    h('a', { class: 'back', href: '#inicio' }, '← Volver a las recomendaciones'),
+    h('a', { class: 'back', href: '#inicio' }, ico('back'), 'Volver a las recomendaciones'),
     h('div', { class: 'forum' }, h('div', { class: 'main' },
       h('header', { class: 'fhead' }, h('div', { class: 'eyebrow' }, 'Foro de la canción'), h('h1', {}, t.title),
         h('div', { class: 'by' }, [t.artist, t.genre].filter(Boolean).join(' · ')),
@@ -492,11 +522,11 @@ function renderForum() {
   const open = S.ui.newBox.querySelector('button'); if (open) open.disabled = !S.user;
 }
 function buildNewThread() {
-  const open = h('button', { class: 'btn small', type: 'button', disabled: !S.user }, 'Abrir un hilo nuevo');
+  const open = h('button', { class: 'btn cta wide', type: 'button', disabled: !S.user }, h('span', { class: 'plus', 'aria-hidden': 'true' }, '+'), 'Abrir un hilo nuevo');
   const sel = h('select', { id: 'nt-cat' }, Object.entries(CATS).map(([k, v]) => h('option', { value: k }, v)));
   const title = h('input', { type: 'text', id: 'nt-title', maxlength: '120', placeholder: 'Título del hilo' });
   const body = h('textarea', { id: 'nt-body', maxlength: '1500', placeholder: 'Tu opinión, análisis o pregunta' });
-  const send = h('button', { class: 'btn small', type: 'button' }, 'Publicar hilo');
+  const send = h('button', { class: 'btn cta small', type: 'button' }, 'Publicar hilo');
   const form = h('div', { class: 'compose', hidden: true },
     h('label', { for: 'nt-cat' }, 'Categoría'), sel, h('label', { for: 'nt-title' }, 'Título'), title, h('label', { for: 'nt-body' }, 'Mensaje'), body,
     h('div', { class: 'row' }, send, h('button', { class: 'btn ghost small', type: 'button', onclick: () => { form.hidden = true; open.hidden = false; } }, 'Cancelar')));
@@ -524,10 +554,11 @@ function renderThreads(list) {
 }
 function likeBtn(targetId) {
   const likes = S.data.likes.filter((l) => l.targetId === targetId), mine = !!S.user && likes.some((l) => l.uid === S.user.uid);
-  const b = h('button', { class: 'like', type: 'button', 'aria-pressed': String(mine), disabled: !S.user, title: S.user ? null : 'Iniciá sesión para dar me gusta' }, `Me gusta · ${likes.length}`);
+  const hs = ico('heart');
+  const b = h('button', { class: 'like', type: 'button', 'aria-pressed': String(mine), disabled: !S.user, title: S.user ? null : 'Iniciá sesión para dar me gusta' }, hs, h('span', {}, `Me gusta · ${likes.length}`));
   b.addEventListener('click', async () => {
-    b.disabled = true;
-    try { await store.toggleLike(S.user, S.slug, targetId, mine); } catch (e) { setNotice(errMsg(e), true); b.disabled = false; }
+    b.disabled = true; b.setAttribute('aria-pressed', String(!mine)); b.classList.add('pop'); if (!mine) fx.burst(hs);
+    try { await store.toggleLike(S.user, S.slug, targetId, mine); } catch (e) { setNotice(errMsg(e), true); b.disabled = false; b.setAttribute('aria-pressed', String(mine)); }
   });
   return b;
 }
@@ -536,7 +567,7 @@ function renderDetail(list) {
   if (!th) { ui.thread = null; ui.detail.replaceChildren(h('h2', {}, 'Elegí un hilo'), h('p', { class: 'hint' }, 'Leé lo que dice la comunidad y sumá tu opinión sobre la canción.')); return; }
   if (!ui.thread || ui.thread.id !== th.id) {
     const ta = h('textarea', { id: 'reply', maxlength: '1500', placeholder: S.user ? 'Escribí tu respuesta' : 'Iniciá sesión para responder', disabled: !S.user });
-    const btn = h('button', { class: 'btn small', type: 'button', disabled: !S.user }, 'Responder');
+    const btn = h('button', { class: 'btn cta small', type: 'button', disabled: !S.user }, 'Responder');
     btn.addEventListener('click', async () => {
       const v = ta.value.trim(); if (!v) return;
       btn.disabled = true;
@@ -593,10 +624,23 @@ const MOOD_COLOR = { feliz: '#ffd166', triste: '#6c8cff', energico: '#ff7a45', r
 const F = { off: null, forums: [], threads: [], tab: 'recientes', song: null, ready: false };
 function moodColor(m) { return MOOD_COLOR[moodLabel(m).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')] || '#7c5cff'; }
 function hue(seed) { let x = 0; for (const c of String(seed)) x = (x * 31 + c.charCodeAt(0)) >>> 0; return x % 360; }
+const NAV_ORDER = ['foros', 'inicio', 'favoritos'];
+const NAV_ICON = { foros: '<svg class="ic" viewBox="0 0 32 32" aria-hidden="true"><path class="ln" d="M5 7.5A3.5 3.5 0 0 1 8.5 4h15A3.5 3.5 0 0 1 27 7.5v9a3.5 3.5 0 0 1-3.5 3.5H15l-5.2 4.4a.6.6 0 0 1-1-.46V20h-.3A3.5 3.5 0 0 1 5 16.5z"/><circle class="dot" cx="11" cy="12" r="1.5"/><circle class="dot" cx="16" cy="12" r="1.5"/><circle class="dot" cx="21" cy="12" r="1.5"/><path class="ln" d="M21 23.2h2.2l3.6 3.1V23.2H27a3 3 0 0 0 3-3v-5" opacity=".55"/></svg>', inicio: '<svg class="ic lupa" viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="mrim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#eafcff"/><stop offset=".3" stop-color="#2be3f2"/><stop offset=".68" stop-color="#7c5cff"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient><linearGradient id="mhan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7f70b8"/><stop offset=".45" stop-color="#cbbff5"/><stop offset="1" stop-color="#2f2552"/></linearGradient><linearGradient id="mcol" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5f1ff"/><stop offset=".5" stop-color="#9a8bd6"/><stop offset="1" stop-color="#3a2f66"/></linearGradient><radialGradient id="mgl" cx=".32" cy=".28" r=".95"><stop offset="0" stop-color="#d6fbff" stop-opacity=".6"/><stop offset=".55" stop-color="#5aa8ff" stop-opacity=".16"/><stop offset="1" stop-color="#7c5cff" stop-opacity=".26"/></radialGradient><clipPath id="mclip"><circle cx="26" cy="26" r="15.2"/></clipPath></defs><ellipse cx="33" cy="58" rx="17" ry="2.6" fill="#000" opacity=".28"/><g transform="rotate(45 26 26)"><rect x="43.5" y="21.5" width="7" height="13" rx="2.2" transform="translate(0 -1.5)" fill="url(#mcol)"/><rect x="49.5" y="23" width="14" height="10" rx="4.5" transform="translate(-1 -1)" fill="url(#mhan)"/><g stroke="#1d1538" stroke-width="1.1" opacity=".55" stroke-linecap="round"><path d="M54 24.2v7.6M57 24.2v7.6M60 24.2v7.6"/></g><path d="M51 24.4h10" stroke="#fff" stroke-opacity=".5" stroke-width="1.2" stroke-linecap="round"/></g><circle cx="26" cy="26" r="15.2" fill="url(#mgl)"/><g clip-path="url(#mclip)"><g transform="rotate(24 26 26)"><rect class="sweep" x="-6" y="0" width="9" height="56" fill="#fff" opacity=".55"/></g></g><circle cx="26" cy="26" r="18" fill="none" stroke="url(#mrim)" stroke-width="4.6"/><circle cx="26" cy="26" r="15.2" fill="none" stroke="#fff" stroke-opacity=".38" stroke-width=".9"/><circle cx="26" cy="26" r="20.4" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width=".8"/><path d="M14.2 22.6A12.6 12.6 0 0 1 22 14.3" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="2.4" stroke-linecap="round"/><circle cx="17.6" cy="17.2" r="1.3" fill="#fff"/><path d="M36.4 33.6a12.6 12.6 0 0 1-3.2 3.7" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="2" stroke-linecap="round"/></svg>', favoritos: '<svg class="ic" viewBox="0 0 32 32" aria-hidden="true"><path class="ln heart-s" d="M16 27.2S4.5 20.4 4.5 12.2A6.2 6.2 0 0 1 16 8.9a6.2 6.2 0 0 1 11.5 3.3C27.5 20.4 16 27.2 16 27.2z"/></svg>' };
+const NAV_LABEL = { foros: 'Foros', inicio: 'Descubrir', favoritos: 'Favoritos' };
 function paintNav(hash) {
   const cur = hash === 'foros' || /^foro-/.test(hash) ? 'foros' : hash === 'favoritos' ? 'favoritos' : 'inicio';
-  $('#nav').replaceChildren(...[['inicio', 'Descubrir'], ['foros', 'Foros'], ['favoritos', 'Favoritos']].map(([k, v]) =>
-    h('a', { href: '#' + k, 'aria-current': k === cur ? 'page' : null }, v)));
+  const nav = $('#nav'), i = NAV_ORDER.indexOf(cur);
+  if (!nav.querySelector('.bub')) {
+    nav.style.setProperty('--i', i); nav.dataset.i = String(i);
+    nav.replaceChildren(h('span', { class: 'bub', 'aria-hidden': 'true' }), ...NAV_ORDER.map((k) => {
+      const a = h('a', { class: 'ni' + (k === 'inicio' ? ' mid' : ''), href: '#' + k, 'aria-label': NAV_LABEL[k], 'data-k': k }, h('span', {}, NAV_LABEL[k]));
+      a.insertAdjacentHTML('afterbegin', NAV_ICON[k]); return a;
+    }));
+  } else if (nav.dataset.i !== String(i)) {
+    nav.dataset.i = String(i); nav.style.setProperty('--i', i);
+    const bub = nav.querySelector('.bub'); bub.classList.remove('jelly'); void bub.offsetWidth; bub.classList.add('jelly');
+  }
+  nav.querySelectorAll('.ni').forEach((a) => { if (a.dataset.k === cur) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
 }
 function tweet(t) {
   const same = !t.body || t.body.indexOf(t.title) === 0;
@@ -648,7 +692,7 @@ function buildFeed() {
   sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') find(); });
   ui.pick.append(h('div', { class: 'search' }, sq, h('button', { class: 'btn ghost small', type: 'button', onclick: find }, 'Buscar')), sres, h('div', { class: 'hint' }, 'O elegí un foro reciente:'), ui.quick);
   const choose = h('button', { class: 'songbtn', type: 'button', disabled: !S.user, onclick: () => { ui.pick.hidden = !ui.pick.hidden; if (!ui.pick.hidden) sq.focus(); } }, '♪ Elegir canción');
-  const send = h('button', { class: 'btn', type: 'button', disabled: !S.user }, 'Publicar');
+  const send = h('button', { class: 'btn cta', type: 'button', disabled: !S.user }, 'Publicar');
   send.addEventListener('click', async () => {
     const text = ta.value.trim();
     if (text.length < 3) { msg.textContent = 'Escribí algo para publicar.'; return; }
@@ -679,6 +723,11 @@ function buildFavs() {
   view.replaceChildren(h('section', { class: 'pagehead' }, h('span', { class: 'eyebrow' }, 'Premium'), h('h1', {}, 'Tus favoritos'), h('p', { class: 'lead' }, 'Las canciones que guardaste, listas para volver a su foro.')), S.ui.fbody);
   renderFavsPage();
 }
+function bigCover(f) {
+  const box = h('div', { class: 'big-cover', 'aria-hidden': 'true' }, h('span', {}, (f.title || '?').trim().charAt(0).toUpperCase()));
+  music.coverFor(f.title, f.artist).then((u) => { if (u) box.append(h('img', { src: String(u), alt: '', referrerpolicy: 'no-referrer', onerror: (e) => e.target.remove() })); }).catch(() => {});
+  return box;
+}
 function renderFavsPage() {
   const box = S.ui && S.ui.fbody; if (!box) return;
   if (!S.user) { box.replaceChildren(h('div', { class: 'empty' }, 'Iniciá sesión para guardar y ver tus favoritos.')); return; }
@@ -691,12 +740,18 @@ function renderFavsPage() {
   box.replaceChildren(
     h('div', { class: 'chips favfilter' }, [['todas', 'Todas'], ...moods.map((m) => [m, moodLabel(m)])].map(([k, v]) =>
       h('button', { class: 'chip', type: 'button', 'aria-pressed': String(S.favMood === k), onclick: () => { S.favMood = k; renderFavsPage(); } }, v))),
-    h('div', { class: 'favgrid' }, shown.map((f) => h('article', { class: 'favcard' },
-      h('div', { class: 'favcover', vars: { '--a': hue(f.slug), '--b': (hue(f.slug) + 70) % 360 } },
-        h('button', { class: 'unfav', type: 'button', 'aria-label': 'Quitar ' + f.title + ' de favoritos', onclick: () => store.toggleFavorite(S.user.uid, f, true).catch(() => {}) }, '♥')),
-      h('h3', { class: 'fav-t' }, f.title), h('div', { class: 'by' }, [f.artist, f.genre].filter(Boolean).join(' · ')),
-      h('div', { class: 'tags' }, (f.moods || []).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
-      h('a', { class: 'btn small favgo', href: '#foro-' + f.slug }, 'Abrir foro →')))));
+    h('div', { class: 'favgrid' }, shown.map((f) => {
+      const card = h('article', { class: 'fv', vars: { '--a': hue(f.slug) } },
+        h('div', { class: 'cov' }, bigCover(f),
+          h('div', { class: 'cap' }, h('h3', {}, f.title), h('span', {}, [f.artist, f.genre].filter(Boolean).join(' · '))),
+          h('button', { class: 'unfav', type: 'button', 'aria-label': 'Quitar ' + f.title + ' de favoritos', onclick: () => {
+            card.classList.add('gone');
+            setTimeout(() => store.toggleFavorite(S.user.uid, f, true).catch(() => card.classList.remove('gone')), 380);
+          } }, ico('heart'))),
+        h('div', { class: 'body' }, h('div', { class: 'tags' }, (f.moods || []).map((m) => h('span', { class: 'tag' }, moodLabel(m)))),
+          h('a', { class: 'btn cta favgo', href: '#foro-' + f.slug }, 'Abrir foro →')));
+      return card;
+    })));
 }
 
 /* ---------- ánimo del día ---------- */
@@ -715,7 +770,7 @@ function openSplash() {
   const norm = (a) => { a %= 360; if (a > 180) a -= 360; if (a < -180) a += 360; return a; };
 
   const ov = h('div', { id: 'splash', class: 'wsplash', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tu ánimo de hoy' });
-  const phone = h('div', { class: 'w-phone' });
+  const phone = h('div', { class: 'w-phone' }), aura = h('div', { class: 'w-aura', 'aria-hidden': 'true' });
   const wheel = h('div', { class: 'w-wheel' }), ring = h('div', { class: 'w-ring' }), glow = h('div', { class: 'w-glow' });
   const pointer = h('div', { class: 'w-pointer', 'aria-hidden': 'true' });
   wheel.append(glow, ring);
@@ -741,7 +796,7 @@ function openSplash() {
   const list = h('div', { class: 'w-list' }, h('h2', {}, 'Elegí tus ánimos'), h('div', { class: 'w-grid' }, rows));
   const skip = h('button', { class: 'w-skip', type: 'button', onclick: () => finish(changing ? null : []) }, changing ? 'Cancelar' : 'Omitir por hoy');
   const foot = h('div', { class: 'w-foot' }, go, skip);
-  phone.append(stage, list, top, foot); ov.append(phone);
+  phone.append(aura, stage, list, top, foot); ov.append(ambEl(), phone);
 
   function layout() {
     const r = stage.getBoundingClientRect(); W = r.width; H = r.height;
@@ -768,7 +823,7 @@ function openSplash() {
       b.style.zIndex = Math.round(k * 10);
       if (d < bd) { bd = d; best = i; }
     }
-    if (best !== focus) { focus = best; nowEl.textContent = moodLabel(MOODS[best]); nowEl.style.color = moodColor(MOODS[best]); }
+    if (best !== focus) { focus = best; nowEl.textContent = moodLabel(MOODS[best]); nowEl.style.color = moodColor(MOODS[best]); aura.style.setProperty('--aura', moodColor(MOODS[best])); }
   }
   function stopAnim() { if (anim) { cancelAnimationFrame(anim.id); anim = null; } }
   function tween(to, ms) {
@@ -803,7 +858,7 @@ function openSplash() {
     go.disabled = !pick.size;
     go.textContent = pick.size ? 'Continuar con ' + pick.size + (pick.size === 1 ? ' ánimo' : ' ánimos') : 'Elegí al menos un ánimo';
   }
-  function toggle(i, spin) { const m = MOODS[i]; if (pick.has(m)) pick.delete(m); else pick.add(m); paint(); if (spin) bringTop(i); }
+  function toggle(i, spin) { const m = MOODS[i]; if (pick.has(m)) pick.delete(m); else { pick.add(m); fx.burst(spin ? orbs[i] : rows[i], [moodColor(m), '#ffffff', moodColor(m), '#ffd166']); } paint(); if (spin) bringTop(i); }
 
   const ang = (e) => { const r = stage.getBoundingClientRect(); return Math.atan2(e.clientX - (r.left + cx), -(e.clientY - (r.top + cy))) * 180 / Math.PI; };
   stage.addEventListener('pointerdown', (e) => {
@@ -860,17 +915,31 @@ function openSplash() {
 }
 
 /* ---------- rutas y arranque ---------- */
-function route() {
-  paintAccount();
-  if (!S.ready) return;
-  if (S.user && S.user.needsName) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('name'); }
-  if (!S.user && !S.guest) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('welcome'); }
-  closeAuth();
-  const hash = location.hash.slice(1); paintNav(hash); if (S.today.pending) openSplash();
+let ROUTE_KEY = null;
+function build(hash) {
   if (hash === 'foros') return buildFeed();
   if (hash === 'favoritos') return buildFavs();
   if (/^foro-[a-z0-9-]{1,80}$/.test(hash)) { const slug = hash.slice(5); if (S.slug !== slug || !S.data) buildForum(slug); return; }
   buildHome();
+}
+function swapMode(prev, key) {
+  const a = NAV_ORDER.indexOf(prev), b = NAV_ORDER.indexOf(key);
+  if (a >= 0 && b >= 0) return b > a ? 1 : -1;
+  return /^foro-/.test(key) ? 'push' : 'pop';
+}
+function route() {
+  paintAccount();
+  if (!S.ready) return;
+  if (S.user && S.user.needsName) { ROUTE_KEY = null; leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('name'); }
+  if (!S.user && !S.guest) { ROUTE_KEY = null; leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('welcome'); }
+  closeAuth();
+  const hash = location.hash.slice(1); paintNav(hash); if (S.today.pending) openSplash();
+  const key = /^foro-[a-z0-9-]{1,80}$/.test(hash) ? hash : NAV_ORDER.includes(hash) ? hash : 'inicio';
+  const prev = ROUTE_KEY, changed = prev !== null && key !== prev; ROUTE_KEY = key;
+  const g = changed ? fx.ghost(view) : null;
+  build(hash);
+  if (changed) fx.swap(view, g, swapMode(prev, key));
+  else if (prev === null && !document.getElementById('boot')) fx.stagger(view);
 }
 window.addEventListener('hashchange', route);
 /* ---------- pantalla de carga ---------- */
@@ -878,7 +947,7 @@ function bootDone() {
   const b = document.getElementById('boot'); if (!b || b.dataset.go) return; b.dataset.go = '1';
   const fonts = document.fonts && document.fonts.ready ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]) : Promise.resolve();
   const wait = new Promise((r) => setTimeout(r, Math.max(0, 1400 - performance.now())));
-  Promise.all([fonts, wait]).then(() => { b.classList.add('out'); setTimeout(() => b.remove(), 800); });
+  Promise.all([fonts, wait]).then(() => { b.classList.add('out'); setTimeout(() => b.remove(), 800); fx.stagger(view); });
 }
 (async function init() {
   const cb = await music.spotifyHandleCallback().catch(() => ({ error: 'No se pudo conectar Spotify.' }));
