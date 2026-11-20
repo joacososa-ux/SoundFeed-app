@@ -66,3 +66,26 @@ export async function toggleLike(user, slug, targetId, liked) {
   const ref = doc(db, 'forums', slug, 'likes', `${targetId}_${user.uid}`);
   if (liked) await deleteDoc(ref); else await setDoc(ref, { targetId, uid: user.uid });
 }
+
+
+/* ---------- feed global de hilos ---------- */
+// Escucha los foros más recientes y los hilos de cada uno; entrega todo junto, del más nuevo al más viejo.
+export function watchFeed(cb, onErr) {
+  if (!configured) return () => {};
+  const subs = new Map(), data = new Map(); let forums = [];
+  const emit = () => cb({ forums, threads: [...data.values()].flat().sort((a, b) => b.createdAt - a.createdAt) });
+  const stop = onSnapshot(query(collection(db, 'forums'), orderBy('createdAt', 'desc'), limit(12)), (s) => {
+    forums = s.docs.map((d) => ({ slug: d.id, ...d.data(), createdAt: ms(d.data().createdAt) }));
+    const keep = new Set(forums.map((f) => f.slug));
+    for (const [k, off] of subs) if (!keep.has(k)) { off(); subs.delete(k); data.delete(k); }
+    for (const f of forums) {
+      if (subs.has(f.slug)) continue;
+      subs.set(f.slug, onSnapshot(collection(db, 'forums', f.slug, 'threads'), (ts) => {
+        data.set(f.slug, ts.docs.map((d) => ({ id: d.id, ...d.data(), slug: f.slug, ftitle: f.title, fartist: f.artist, fmoods: f.moods || [], createdAt: ms(d.data().createdAt) })));
+        emit();
+      }, onErr));
+    }
+    emit();
+  }, onErr);
+  return () => { stop(); subs.forEach((o) => o()); };
+}
