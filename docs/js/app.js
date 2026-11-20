@@ -107,13 +107,13 @@ function buildHome() {
       h('h1', {}, 'Descubrí una canción y ', h('em', {}, 'entrá a la charla.')),
       h('p', {}, 'Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, creado en el momento, donde la comunidad analiza la letra y debate sobre el artista.')),
     S.spotifyMsg && h('div', { class: 'notice', role: 'status' }, S.spotifyMsg),
-    todayStrip(), S.today.moods.length ? ui.results : null,
+    todayStrip(), S.today.moods.length ? ui.results : '',
     h('div', { class: 'picker' },
       h('fieldset', {}, h('legend', {}, '¿Cómo te sentís?'), h('div', { class: 'chips' }, chips)),
       h('div', {}, h('label', { class: 'lbl', for: 'feel' }, 'O contalo con tus palabras'), ta),
       h('div', { class: 'row' }, go),
       h('div', {}, h('label', { class: 'lbl', for: 'sq' }, 'O buscá cualquier canción o artista'), h('div', { class: 'search' }, sq, sgo), ui.sres)),
-    S.today.moods.length ? null : ui.results,
+    S.today.moods.length ? '' : ui.results,
     adBox(),
     h('div', { class: 'section-title' }, h('h2', {}, 'Foros recientes')), ui.trend);
   S.spotifyMsg = '';
