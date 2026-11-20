@@ -76,11 +76,17 @@ async function itunesOne(term, limit, extra) {
 export async function itunesSearch(term, limit = 8) {
   const key = 'it:' + term + limit;
   if (cache.has(key)) return cache.get(key);
-  const jobs = [itunesOne(term, limit, {}), itunesOne(term, limit, { country: 'AR' }), itunesOne(term, limit, { country: 'AR', attribute: 'artistTerm' })];
-  const res = await Promise.allSettled(jobs);
-  if (res.every((r) => r.status === 'rejected')) throw res[0].reason;
+  let base = null, err = null;
+  try { base = await itunesOne(term, limit, {}); } catch (e) { err = e; }
+  if (!base) { try { base = await itunesOne(term, limit, { country: 'AR' }); } catch (e) { err = e; } }
+  if (!base) throw err || new Error('itunes');
+  const lists = [base];
+  if (limit > 3) { // extras opcionales: si fallan o tardan, se ignoran
+    const wait = new Promise((r) => setTimeout(r, 4000, []));
+    const extra = (x) => Promise.race([itunesOne(term, limit, x).catch(() => []), wait]);
+    lists.push(...(await Promise.all([extra({ country: 'AR' }), extra({ country: 'AR', attribute: 'artistTerm' })])));
+  }
   const seen = new Set(), rows = [];
-  const lists = res.map((r) => (r.status === 'fulfilled' ? r.value : []));
   for (let i = 0; i < limit; i++) for (const l of lists) { const r = l[i]; if (!r) continue; const k = norm(r.title) + '|' + norm(r.artist); if (!seen.has(k)) { seen.add(k); rows.push(r); } }
   cache.set(key, rows);
   return rows;
