@@ -8,6 +8,13 @@ const view = $('#view');
 const S = { user: null, ready: false, guest: false, picked: new Set(), text: '', recs: null, recNote: '', ui: {},
   slug: null, data: null, cat: 'todo', threadId: null, off: null, offRecent: null, notice: '', spotifyMsg: '', premium: false, favs: [], offPlan: null, offFavs: null };
 const FREE_RECS = 3, PREMIUM_RECS = 9;
+const TODAY_NOTE = 'Según tu ánimo de hoy';
+const dayKey = () => new Date().toLocaleDateString('sv-SE');
+function loadToday() {
+  try { const t = JSON.parse(localStorage.getItem('sf_today') || 'null'); if (t && t.date === dayKey() && Array.isArray(t.moods)) return { date: t.date, moods: t.moods.filter((m) => MOODS.includes(m)), pending: false }; } catch (_) {}
+  return { date: dayKey(), moods: [], pending: true };
+}
+S.today = loadToday();
 try { S.guest = sessionStorage.getItem('sf_guest') === '1'; } catch (_) {}
 
 /* ---------- utilidades ---------- */
@@ -76,6 +83,7 @@ function wave(seed) {
 function leaveForum() { if (S.off) { S.off(); S.off = null; } if (F.off) { F.off(); F.off = null; } S.slug = null; S.data = null; }
 function buildHome() {
   leaveForum();
+  if (S.today.moods.length && !S.recs) { S.picked = new Set(S.today.moods); S.recs = recommend([...S.picked], '', S.premium ? PREMIUM_RECS : FREE_RECS); S.recNote = TODAY_NOTE; }
   const chips = MOODS.map((m) => h('button', { class: 'chip mood', type: 'button', vars: { '--mc': moodColor(m) }, 'aria-pressed': String(S.picked.has(m)),
     onclick: (e) => { S.picked.has(m) ? S.picked.delete(m) : S.picked.add(m); e.currentTarget.setAttribute('aria-pressed', String(S.picked.has(m))); } }, moodLabel(m)));
   const ta = h('textarea', { id: 'feel', maxlength: '300', placeholder: 'Ej: Terminé un examen difícil y quiero algo para celebrar. Me gusta el rock en español.' });
@@ -99,12 +107,13 @@ function buildHome() {
       h('h1', {}, 'Descubrí una canción y ', h('em', {}, 'entrá a la charla.')),
       h('p', {}, 'Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, creado en el momento, donde la comunidad analiza la letra y debate sobre el artista.')),
     S.spotifyMsg && h('div', { class: 'notice', role: 'status' }, S.spotifyMsg),
+    todayStrip(), S.today.moods.length ? ui.results : null,
     h('div', { class: 'picker' },
       h('fieldset', {}, h('legend', {}, '¿Cómo te sentís?'), h('div', { class: 'chips' }, chips)),
       h('div', {}, h('label', { class: 'lbl', for: 'feel' }, 'O contalo con tus palabras'), ta),
       h('div', { class: 'row' }, go),
       h('div', {}, h('label', { class: 'lbl', for: 'sq' }, 'O buscá cualquier canción o artista'), h('div', { class: 'search' }, sq, sgo), ui.sres)),
-    ui.results,
+    S.today.moods.length ? null : ui.results,
     adBox(),
     h('div', { class: 'section-title' }, h('h2', {}, 'Foros recientes')), ui.trend);
   S.spotifyMsg = '';
@@ -145,6 +154,7 @@ function favBtn(t) {
 function renderPlan() {
   paintAccount();
   document.querySelectorAll('.ad').forEach((a) => { a.hidden = S.premium; });
+  if (S.recNote === TODAY_NOTE && S.ui && S.ui.results && S.recs && S.recs.length !== (S.premium ? PREMIUM_RECS : FREE_RECS)) { S.recs = recommend([...S.picked], '', S.premium ? PREMIUM_RECS : FREE_RECS); renderResults(); }
   renderFavs();
   if (S.ui && S.ui.favBox && S.data && S.data.forum) S.ui.favBox.replaceChildren(favBtn(S.data.forum));
   if (S.data && S.ui && S.ui.list) renderForum();
@@ -160,7 +170,7 @@ function renderResults() {
   const box = S.ui.results; if (!box) return;
   if (!S.recs || !S.recs.length) { box.replaceChildren(); return; }
   box.replaceChildren(
-    h('div', { class: 'section-title' }, h('h2', {}, 'Para vos'), h('span', { class: 'source' }, S.recNote)),
+    h('div', { class: 'section-title' }, h('h2', {}, S.recNote === TODAY_NOTE ? 'Para tu ánimo hoy' : 'Para vos'), h('span', { class: 'source' }, S.recNote)),
     h('div', { class: 'grid' }, S.recs.map((r) => h('button', { class: 'card', type: 'button', onclick: () => openTrack(r) },
       wave(slugify(r.artist, r.title)),
       h('h3', {}, r.title),
@@ -435,12 +445,50 @@ function renderFavsPage() {
       h('a', { class: 'btn small favgo', href: '#foro-' + f.slug }, 'Abrir foro →')))));
 }
 
+/* ---------- ánimo del día ---------- */
+function todayStrip() {
+  const t = S.today;
+  return h('div', { class: 'todaybar' },
+    t.moods.length ? [h('span', { class: 'hint' }, 'Hoy te sentís:'), t.moods.map((m) => h('span', { class: 'todaychip', vars: { '--mc': moodColor(m) } }, moodLabel(m))), h('button', { class: 'btn ghost small', type: 'button', onclick: openSplash }, 'Cambiar')]
+      : [h('span', { class: 'hint' }, 'Todavía no elegiste tu ánimo de hoy.'), h('button', { class: 'btn small', type: 'button', onclick: openSplash }, 'Elegir ánimo')]);
+}
+function openSplash() {
+  if ($('#splash')) return;
+  const changing = !S.today.pending, pick = new Set(S.today.moods), n = MOODS.length;
+  const date = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const go = h('button', { class: 'btn big', type: 'button' });
+  const upd = () => { go.disabled = !pick.size; go.textContent = pick.size ? 'Continuar con ' + pick.size + (pick.size === 1 ? ' ánimo' : ' ánimos') : 'Elegí al menos un ánimo'; };
+  const items = MOODS.map((m, i) => h('div', { class: 'orb-item', vars: { '--a': (360 * i / n) + 'deg' } },
+    h('div', { class: 'orb-hold' }, h('button', { class: 'orb', type: 'button', vars: { '--mc': moodColor(m), '--i': i }, 'aria-pressed': String(pick.has(m)),
+      onclick: (e) => { pick.has(m) ? pick.delete(m) : pick.add(m); e.currentTarget.setAttribute('aria-pressed', String(pick.has(m))); upd(); } }, h('i'), moodLabel(m)))));
+  const ov = h('div', { id: 'splash', class: 'splash', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tu ánimo de hoy' });
+  const finish = (moods) => {
+    if (moods) {
+      S.today = { date: dayKey(), moods, pending: false };
+      try { localStorage.setItem('sf_today', JSON.stringify({ date: S.today.date, moods })); } catch (_) {}
+      S.picked = new Set(moods); S.recs = null; S.recNote = '';
+    }
+    ov.classList.add('out'); document.removeEventListener('keydown', onKey);
+    setTimeout(() => { ov.remove(); document.body.classList.remove('noscroll'); if (moods) route(); }, 450);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') finish(changing ? null : []); };
+  document.addEventListener('keydown', onKey);
+  go.addEventListener('click', () => { if (pick.size) finish([...pick]); });
+  const skip = h('button', { class: 'skip', type: 'button', onclick: () => finish(changing ? null : []) }, changing ? 'Cancelar' : 'Omitir por hoy');
+  ov.append(h('div', { class: 'splash-in' },
+    h('div', { class: 'stage' }, h('div', { class: 'orbit' }, items),
+      h('div', { class: 'center' }, h('p', { class: 'eyebrow' }, date.charAt(0).toUpperCase() + date.slice(1)), h('h1', {}, '¿Cómo te sentís hoy?'), h('p', { class: 'hint' }, 'Elegí uno o varios ánimos. Armamos tu música del día.'))),
+    h('div', { class: 'splash-act' }, go, skip)));
+  upd(); document.body.classList.add('noscroll'); document.body.append(ov);
+  const first = ov.querySelector('.orb'); if (first) first.focus({ preventScroll: true });
+}
+
 /* ---------- rutas y arranque ---------- */
 function route() {
   paintAccount();
   if (!S.ready) return;
   if (!S.user && !S.guest) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return buildGate(); }
-  const hash = location.hash.slice(1); paintNav(hash);
+  const hash = location.hash.slice(1); paintNav(hash); if (S.today.pending) openSplash();
   if (hash === 'foros') return buildFeed();
   if (hash === 'favoritos') return buildFavs();
   if (/^foro-[a-z0-9-]{1,80}$/.test(hash)) { const slug = hash.slice(5); if (S.slug !== slug || !S.data) buildForum(slug); return; }
