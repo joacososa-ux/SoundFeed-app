@@ -1,5 +1,5 @@
 // Portada y reproducción desde el navegador: iTunes (30 s, sin clave), YouTube (clave opcional) y Spotify (PKCE).
-import { spotifyClientId, youtubeApiKey } from './config.js';
+import { spotifyClientId, spotifyEnabled, youtubeApiKey } from './config.js';
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const cache = new Map();
@@ -57,8 +57,8 @@ const rand = (n) => b64url(crypto.getRandomValues(new Uint8Array(n)));
 const load = () => { try { return JSON.parse(localStorage.getItem(SK)); } catch (_) { return null; } };
 const save = (v) => { try { v ? localStorage.setItem(SK, JSON.stringify(v)) : localStorage.removeItem(SK); } catch (_) {} };
 
-export const spotifyAvailable = () => !!spotifyClientId;
-export const spotifyConnected = () => !!load();
+export const spotifyAvailable = () => !!spotifyEnabled && !!spotifyClientId;
+export const spotifyConnected = () => spotifyAvailable() && !!load();
 export const spotifyPremium = () => !!(load() || {}).premium;
 export const spotifyDisconnect = () => save(null);
 
