@@ -1,8 +1,8 @@
 // Acceso a Firebase (login con Google y base de datos Firestore). Todo lo de Firebase vive en este archivo.
 import { firebaseConfig } from './config.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getFirestore, doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, doc, getDoc, setDoc, addDoc, deleteDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp, writeBatch }
   from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 export const configured = !Object.values(firebaseConfig).some((v) => !v || String(v).startsWith('PEGAR'));
@@ -14,7 +14,32 @@ const ms = (t) => (t && t.toMillis ? t.toMillis() : Date.now()); // serverTimest
 /* ---------- sesión ---------- */
 export function watchUser(cb) {
   if (!configured) return cb(null);
-  return onAuthStateChanged(auth, (u) => cb(u ? { uid: u.uid, name: u.displayName || (u.email || 'Oyente').split('@')[0], photo: u.photoURL || null } : null));
+  let seq = 0;
+  return onAuthStateChanged(auth, async (u) => {
+    const my = ++seq;
+    if (!u) return cb(null);
+    let username = null, unknown = false;
+    try { const p = await getDoc(doc(db, 'profiles', u.uid)); if (p.exists()) username = p.data().username; } catch (_) { unknown = true; }
+    if (my !== seq) return;
+    cb({ uid: u.uid, name: username || u.displayName || (u.email || 'Oyente').split('@')[0], photo: u.photoURL || null, email: u.email || '',
+      verified: !!u.emailVerified, password: u.providerData.some((p) => p.providerId === 'password'), needsName: !username && !unknown });
+  });
+}
+export async function signUpEmail(email, pass) {
+  const c = await createUserWithEmailAndPassword(auth, email, pass);
+  try { await sendEmailVerification(c.user); } catch (_) {}
+  return c.user;
+}
+export const signInEmail = (email, pass) => signInWithEmailAndPassword(auth, email, pass);
+export const resetPassword = (email) => sendPasswordResetEmail(auth, email);
+export const resendVerification = () => sendEmailVerification(auth.currentUser);
+export async function usernameFree(name) { return !(await getDoc(doc(db, 'usernames', name))).exists(); }
+export async function claimUsername(user, name) {
+  const b = writeBatch(db);
+  b.set(doc(db, 'usernames', name), { uid: user.uid, createdAt: serverTimestamp() });
+  b.set(doc(db, 'profiles', user.uid), { username: name, createdAt: serverTimestamp() });
+  await b.commit();
+  try { await updateProfile(auth.currentUser, { displayName: name }); } catch (_) {}
 }
 export const signInGoogle = () => signInWithPopup(auth, new GoogleAuthProvider());
 export const logout = () => signOut(auth);
