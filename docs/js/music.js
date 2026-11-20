@@ -1,5 +1,5 @@
 // Portada y reproducción desde el navegador: iTunes (30 s, sin clave), YouTube (clave opcional) y Spotify (PKCE).
-import { spotifyClientId, spotifyEnabled, youtubeApiKey } from './config.js';
+import * as cfg from './config.js'; const { spotifyClientId, youtubeApiKey } = cfg, spotifyEnabled = cfg.spotifyEnabled === true;
 
 const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const cache = new Map();
