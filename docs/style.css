@@ -305,3 +305,5 @@ a.songchip:hover { background: rgba(43,227,242,.2); }
   .feedcol .pagehead { padding: 18px 14px 4px; }
   .favgrid { grid-template-columns: 1fr; }
 }
+
+.compose[hidden], .pickbox[hidden] { display: none; }
