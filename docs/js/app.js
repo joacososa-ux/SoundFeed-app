@@ -42,16 +42,13 @@ const errMsg = (e) => (e && e.code === 'permission-denied' ? 'No tenés permiso 
 
 /* ---------- cuenta, bienvenida y Spotify ---------- */
 function setGuest(v) { S.guest = v; try { v ? sessionStorage.setItem('sf_guest', '1') : sessionStorage.removeItem('sf_guest'); } catch (_) {} }
-async function login() {
-  try { await store.signInGoogle(); }
-  catch (e) { if (e && e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') { S.notice = 'No se pudo iniciar sesión con Google.'; route(); } }
-}
 function paintAccount() {
   const box = $('#account');
   if (S.user) {
     box.replaceChildren(
       h('span', { class: 'pill ok' }, S.user.photo ? h('img', { class: 'avatar', src: S.user.photo, alt: '', referrerpolicy: 'no-referrer' }) : h('i'), S.user.name),
       S.premium ? h('span', { class: 'badge', title: 'Plan Premium' }, 'Premium') : h('span', { class: 'pill', title: 'El plan Premium llega pronto' }, 'Plan gratuito'),
+      S.user.password && !S.user.verified && h('button', { class: 'btn ghost small', type: 'button', title: 'Te enviamos un correo para confirmar tu dirección', onclick: resendVerify }, 'Confirmá tu correo'),
       music.spotifyAvailable() && (music.spotifyConnected()
         ? h('span', { class: 'pill ok' }, h('i'), music.spotifyPremium() ? 'Spotify Premium' : 'Spotify conectado')
         : h('button', { class: 'btn ghost small', type: 'button', onclick: music.spotifyConnect }, 'Conectar Spotify')),
@@ -61,17 +58,198 @@ function paintAccount() {
       store.configured && h('button', { class: 'btn small', type: 'button', onclick: () => { setGuest(false); route(); } }, 'Iniciar sesión'));
   }
 }
-function buildGate() {
-  view.replaceChildren(h('section', { class: 'gate' },
-    h('h1', {}, 'Entrá a SoundFeed'),
-    h('p', {}, 'Con tu cuenta de Google participás en los foros y escuchás las canciones. Sin cuenta podés mirar, en modo visita.'),
-    !store.configured && h('div', { class: 'notice err', role: 'alert' }, 'Falta configurar Firebase: completá js/config.js (mirá el README).'),
-    S.notice && h('div', { class: 'notice err', role: 'alert' }, S.notice),
-    h('button', { class: 'login google', type: 'button', disabled: !store.configured, onclick: login }, 'Continuar con Google'),
-    h('button', { class: 'login guest', type: 'button', onclick: () => { setGuest(true); route(); } }, 'Entrar como visita'),
-    h('p', { class: 'small' }, 'Después de entrar podés conectar tu cuenta de Spotify para escuchar la canción completa.')));
-  S.notice = '';
+/* ---------- acceso: ingreso, registro y nombre de usuario ---------- */
+const LOGO_SVG = '<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="lgw" gradientUnits="userSpaceOnUse" x1="5" y1="5" x2="43" y2="43"><stop offset="0" stop-color="#2be3f2"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient></defs><path d="M24 5C13 5 5 12.6 5 22.4c0 5.2 2.4 9.7 6.2 12.8L9 43l8.3-4.1c2 .6 4.2.9 6.7.9 11 0 19-7.6 19-17.4S35 5 24 5z" fill="none" stroke="url(#lgw)" stroke-width="3" stroke-linejoin="round"/><g fill="none" stroke="url(#lgw)" stroke-width="3" stroke-linecap="round"><path class="b" d="M16 20v6"/><path class="b" d="M21 15v16"/><path class="b" d="M26 12v22"/><path class="b" d="M31 17v12"/><path class="b" d="M36 21v4"/></g></svg>';
+const G_SVG = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
+const logoEl = () => { const s = h('span', { class: 'w-logo' }); s.innerHTML = LOGO_SVG; return s; };
+const A = { el: null, screen: 'welcome', busy: false, seq: 0, timer: 0 };
+const RESERVED = ['admin', 'administrador', 'soundfeed', 'soporte', 'moderador', 'root'];
+const COMMON_PW = ['password', 'contrasena', 'contraseña', '1234567890', '12345678910', 'qwertyuiop', 'abcdefghij', 'soundfeed123', 'password123', 'contraseña123', 'iloveyou123'];
+const validEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+function pwCheck(p, email) {
+  const local = (email || '').split('@')[0].toLowerCase();
+  const r = { len: p.length >= 10, mix: /[a-z]/.test(p) && /[A-Z]/.test(p) && /\d/.test(p),
+    common: p.length > 0 && !COMMON_PW.includes(p.toLowerCase()) && !(local.length > 2 && p.toLowerCase().includes(local)) };
+  const n = Object.values(r).filter(Boolean).length, ok = r.len && r.mix && r.common;
+  return { r, ok, s: !p ? 0 : ok ? (p.length >= 14 ? 4 : 3) : (n >= 2 ? 2 : 1) };
 }
+function authErr(e) {
+  const c = e && e.code;
+  if (c === 'auth/email-already-in-use') return 'Ya existe una cuenta con ese correo. Probá iniciar sesión.';
+  if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found' || c === 'auth/invalid-email') return 'Correo o contraseña incorrectos.';
+  if (c === 'auth/too-many-requests') return 'Demasiados intentos. Esperá unos minutos y probá de nuevo.';
+  if (c === 'auth/network-request-failed') return 'Sin conexión. Revisá tu internet y probá de nuevo.';
+  if (c === 'auth/operation-not-allowed') return 'El acceso con correo todavía no está habilitado.';
+  if (c === 'auth/weak-password') return 'Elegí una contraseña más segura.';
+  return 'No se pudo completar. Probá de nuevo.';
+}
+async function resendVerify(e) {
+  const b = e.currentTarget; b.disabled = true;
+  try { await store.resendVerification(); b.textContent = 'Correo enviado'; } catch (_) { b.textContent = 'Probá más tarde'; }
+}
+const AUTH_HTML = '<div class="a-wrap">'
+  + '<section class="a-screen" data-s="welcome" aria-label="Acceso">'
+  + '<div class="a-brand"><span data-logo></span><span class="a-word">Sound<i>Feed</i></span></div>'
+  + '<div class="a-hero"><h1>Descubrí una canción y <em>entrá a la charla.</em></h1><p>Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, donde la comunidad analiza la letra y debate sobre el artista.</p></div>'
+  + '<div class="a-grow"></div>'
+  + '<div class="a-actions"><div class="a-err" role="alert"></div>'
+  + '<button type="button" class="a-btn primary" data-go="login">Iniciar sesión</button>'
+  + '<button type="button" class="a-btn" data-go="signup">Registrarme</button>'
+  + '<div class="a-sep">o</div>'
+  + '<button type="button" class="a-btn google" data-google>' + G_SVG + 'Continuar con Google</button>'
+  + '<button type="button" class="a-visit" data-visit>Entrar como visita (solo lectura)</button></div>'
+  + '<p class="a-legal">Al continuar aceptás los términos y la política de privacidad.</p>'
+  + '</section>'
+  + '<section class="a-screen" data-s="signup" aria-label="Registro">'
+  + '<button type="button" class="a-back" data-go="welcome">← Volver</button>'
+  + '<div class="a-steps" aria-hidden="true"><i class="on"></i><i></i></div>'
+  + '<h2 class="a-title">Creá tu cuenta</h2>'
+  + '<p class="a-sub">Con tu correo y una contraseña segura. Después elegís cómo te llamamos.</p>'
+  + '<form id="a-fsignup" novalidate>'
+  + '<div class="a-field"><label for="a-se">Correo electrónico</label><div class="a-in"><input id="a-se" type="email" autocomplete="email" inputmode="email" placeholder="tucorreo@ejemplo.com" required></div><div class="a-hint" id="a-seh"></div></div>'
+  + '<div class="a-field"><label for="a-sp">Contraseña</label><div class="a-in"><input id="a-sp" type="password" autocomplete="new-password" placeholder="Al menos 10 caracteres" required><button type="button" class="a-eye" data-eye="a-sp">Ver</button></div>'
+  + '<div class="a-meter" id="a-meter" data-s="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>'
+  + '<ul class="a-rules" id="a-rules"><li data-r="len">10 caracteres o más</li><li data-r="mix">Mayúsculas, minúsculas y un número</li><li data-r="common">No es una contraseña común ni tu correo</li></ul></div>'
+  + '<div class="a-field"><label for="a-sp2">Repetí la contraseña</label><div class="a-in"><input id="a-sp2" type="password" autocomplete="new-password" placeholder="Otra vez, para evitar errores" required><button type="button" class="a-eye" data-eye="a-sp2">Ver</button></div><div class="a-hint" id="a-sp2h"></div></div>'
+  + '<div class="a-err" role="alert"></div>'
+  + '<button class="a-btn primary" id="a-sbtn" disabled>Crear cuenta</button>'
+  + '</form>'
+  + '<p class="a-small">Te mandamos un correo para confirmar tu dirección. Tu contraseña se guarda cifrada y nadie del equipo puede verla.</p>'
+  + '</section>'
+  + '<section class="a-screen" data-s="login" aria-label="Iniciar sesión">'
+  + '<button type="button" class="a-back" data-go="welcome">← Volver</button>'
+  + '<h2 class="a-title">Qué bueno verte de nuevo</h2>'
+  + '<p class="a-sub">Entrá con tu correo y contraseña.</p>'
+  + '<form id="a-flogin" novalidate>'
+  + '<div class="a-field"><label for="a-le">Correo electrónico</label><div class="a-in"><input id="a-le" type="email" autocomplete="email" inputmode="email" placeholder="tucorreo@ejemplo.com"></div></div>'
+  + '<div class="a-field"><label for="a-lp">Contraseña</label><div class="a-in"><input id="a-lp" type="password" autocomplete="current-password" placeholder="Tu contraseña"><button type="button" class="a-eye" data-eye="a-lp">Ver</button></div>'
+  + '<button type="button" class="a-link" id="a-forgot">¿Te olvidaste la contraseña?</button></div>'
+  + '<div class="a-err" role="alert"></div>'
+  + '<button class="a-btn primary" id="a-lbtn">Entrar</button>'
+  + '</form>'
+  + '<div class="a-sep">o</div>'
+  + '<button type="button" class="a-btn google" data-google>' + G_SVG + 'Continuar con Google</button>'
+  + '<p class="a-small" style="text-align:center">¿Todavía no tenés cuenta? <button type="button" class="a-link inline" data-go="signup">Registrate</button></p>'
+  + '</section>'
+  + '<section class="a-screen" data-s="name" aria-label="Nombre de usuario">'
+  + '<div class="a-steps" aria-hidden="true" style="margin-top:14px"><i class="on"></i><i class="on"></i></div>'
+  + '<h2 class="a-title big">¿Cómo querés que te llamemos?</h2>'
+  + '<p class="a-sub">Es el nombre que van a ver los demás en los foros. Elegilo con cuidado: por ahora no se puede cambiar.</p>'
+  + '<div class="a-namewrap"><div class="a-namebox" id="a-nbox"><span class="a-at">@</span><input id="a-nin" type="text" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="tu_nombre" aria-describedby="a-nstat"><span class="a-state" id="a-nstate" aria-hidden="true"></span></div>'
+  + '<div class="a-status" id="a-nstat" role="status" aria-live="polite">De 3 a 20 letras, números o guion bajo.</div><div class="a-chips" id="a-sugg" hidden></div></div>'
+  + '<div class="a-grow"></div>'
+  + '<button type="button" class="a-btn primary" id="a-nbtn" disabled>Continuar</button>'
+  + '<button type="button" class="a-visit" data-logout>Usar otra cuenta</button>'
+  + '</section></div>';
+function setScreen(s) {
+  A.screen = s;
+  A.el.querySelectorAll('.a-screen').forEach((e) => e.classList.toggle('on', e.dataset.s === s));
+  A.el.scrollTop = 0;
+  const f = A.el.querySelector('.a-screen.on input');
+  if (f && s !== 'welcome') setTimeout(() => { try { f.focus({ preventScroll: true }); } catch (_) {} }, 350);
+}
+function buildAuth() {
+  const el = h('div', { class: 'auth', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Acceso a SoundFeed' });
+  el.innerHTML = AUTH_HTML; A.el = el;
+  const q = (s) => el.querySelector(s);
+  const say = (msg, ok) => { const n = q('.a-screen.on .a-err'); if (!n) return; n.textContent = msg || ''; n.classList.toggle('ok', !!ok); };
+  el.querySelectorAll('[data-logo]').forEach((n) => n.replaceWith(logoEl()));
+  if (!store.configured) say('Falta configurar Firebase: completá js/config.js (mirá el README).');
+  el.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); say(''); setScreen(go.dataset.go); return; }
+    const eye = e.target.closest('[data-eye]');
+    if (eye) { const i = q('#' + eye.dataset.eye); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; eye.textContent = show ? 'Ocultar' : 'Ver'; return; }
+    if (e.target.closest('[data-visit]')) { setGuest(true); route(); return; }
+    if (e.target.closest('[data-logout]')) { store.logout(); return; }
+    if (e.target.closest('[data-google]')) googleIn();
+  });
+  async function googleIn() {
+    if (!store.configured) return;
+    try { await store.signInGoogle(); }
+    catch (e) { if (e && e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') say('No se pudo continuar con Google. Probá de nuevo.'); }
+  }
+  /* registro */
+  const se = q('#a-se'), sp = q('#a-sp'), sp2 = q('#a-sp2'), sbtn = q('#a-sbtn');
+  const checkSignup = () => {
+    const e = se.value.trim(), p = sp.value, p2 = sp2.value, st = pwCheck(p, e);
+    q('#a-meter').dataset.s = st.s;
+    el.querySelectorAll('#a-rules li').forEach((li) => li.classList.toggle('ok', !!st.r[li.dataset.r]));
+    const badE = !!e && !validEmail(e), eh = q('#a-seh');
+    eh.textContent = badE ? 'Revisá el correo: parece que le falta algo.' : ''; eh.className = 'a-hint' + (badE ? ' bad' : '');
+    const same = !!p2 && p === p2, h2 = q('#a-sp2h');
+    h2.textContent = p2 ? (same ? '✓ Coinciden' : 'No coinciden todavía') : ''; h2.className = 'a-hint' + (p2 && !same ? ' bad' : '');
+    sbtn.disabled = A.busy || !(validEmail(e) && st.ok && same);
+  };
+  [se, sp, sp2].forEach((i) => i.addEventListener('input', checkSignup));
+  q('#a-fsignup').addEventListener('submit', async (e) => {
+    e.preventDefault(); if (sbtn.disabled) return;
+    A.busy = true; sbtn.disabled = true; sbtn.textContent = 'Creando cuenta…'; say('');
+    try { await store.signUpEmail(se.value.trim(), sp.value); sp.value = ''; sp2.value = ''; }
+    catch (err) { say(authErr(err)); }
+    finally { A.busy = false; sbtn.textContent = 'Crear cuenta'; if (A.el === el) checkSignup(); }
+  });
+  /* iniciar sesión */
+  q('#a-flogin').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const em = q('#a-le').value.trim(), pw = q('#a-lp').value, btn = q('#a-lbtn');
+    if (!validEmail(em) || !pw) return say('Escribí tu correo y tu contraseña.');
+    say(''); btn.disabled = true; btn.textContent = 'Entrando…';
+    try { await store.signInEmail(em, pw); q('#a-lp').value = ''; }
+    catch (err) { say(authErr(err)); }
+    finally { btn.disabled = false; btn.textContent = 'Entrar'; }
+  });
+  q('#a-forgot').addEventListener('click', async () => {
+    const em = q('#a-le').value.trim();
+    if (!validEmail(em)) return say('Escribí tu correo arriba y tocá de nuevo.');
+    const msg = 'Si ese correo tiene una cuenta, te mandamos un enlace para cambiar la contraseña.';
+    try { await store.resetPassword(em); say(msg, true); }
+    catch (err) { if (err && err.code === 'auth/network-request-failed') say(authErr(err)); else say(msg, true); }
+  });
+  /* nombre de usuario */
+  const nin = q('#a-nin'), nbtn = q('#a-nbtn'), nbox = q('#a-nbox');
+  const setName = (state, text, cls) => {
+    nbox.className = 'a-namebox ' + (cls || ''); q('#a-nstate').innerHTML = state;
+    const s = q('#a-nstat'); s.textContent = text; s.className = 'a-status ' + (cls || '');
+  };
+  const suggest = (base) => {
+    const box = q('#a-sugg');
+    const alts = [base + '_', base + (10 + Math.floor(Math.random() * 89)), 'la_' + base].filter((a) => a.length <= 20);
+    box.replaceChildren(...alts.map((a) => h('button', { type: 'button', onclick: () => { nin.value = a; nin.dispatchEvent(new Event('input')); } }, '@' + a)));
+    box.hidden = !alts.length;
+  };
+  nin.addEventListener('input', () => {
+    const raw = nin.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); if (raw !== nin.value) nin.value = raw;
+    clearTimeout(A.timer); nbtn.disabled = true; q('#a-sugg').hidden = true; const my = ++A.seq;
+    if (!raw) return setName('', 'De 3 a 20 letras, números o guion bajo.');
+    if (raw.length < 3) return setName('', 'Necesita al menos 3 caracteres.');
+    if (RESERVED.includes(raw)) return setName('✕', 'Ese nombre está reservado. Elegí otro.', 'bad');
+    setName('<span class="a-spin"></span>', 'Verificando disponibilidad…');
+    A.timer = setTimeout(async () => {
+      try {
+        const free = await store.usernameFree(raw); if (my !== A.seq) return;
+        if (free) { setName('✓', '¡@' + raw + ' está disponible!', 'ok'); nbtn.disabled = false; }
+        else { setName('✕', '@' + raw + ' ya está en uso. Probá con otro:', 'bad'); suggest(raw); }
+      } catch (_) { if (my === A.seq) setName('', 'No pudimos verificarlo ahora. Probá de nuevo en un momento.', 'bad'); }
+    }, 450);
+  });
+  nin.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !nbtn.disabled) nbtn.click(); });
+  nbtn.addEventListener('click', async () => {
+    const name = nin.value; if (!name || !S.user) return;
+    nbtn.disabled = true; nbtn.textContent = 'Guardando…';
+    try { await store.claimUsername(S.user, name); S.user = { ...S.user, name, needsName: false }; route(); }
+    catch (err) {
+      nbtn.textContent = 'Continuar';
+      if (err && err.code === 'permission-denied') { setName('✕', '@' + name + ' ya está en uso. Probá con otro:', 'bad'); suggest(name); }
+      else { setName('', 'No se pudo guardar. Probá de nuevo.', 'bad'); nbtn.disabled = false; }
+    }
+  });
+  document.body.classList.add('noscroll'); document.body.append(el);
+}
+function openAuth(want) {
+  if (!A.el) { buildAuth(); setScreen(want); return; }
+  if (want === 'name' ? A.screen !== 'name' : A.screen === 'name') setScreen(want);
+}
+function closeAuth() { if (!A.el) return; A.el.remove(); A.el = null; document.body.classList.remove('noscroll'); }
 
 /* ---------- inicio ---------- */
 function wave(seed) {
@@ -103,9 +281,7 @@ function buildHome() {
   } }, 'Buscar');
   sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') sgo.click(); });
   view.replaceChildren(
-    h('section', { class: 'hero' },
-      h('h1', {}, 'Descubrí una canción y ', h('em', {}, 'entrá a la charla.')),
-      h('p', {}, 'Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, creado en el momento, donde la comunidad analiza la letra y debate sobre el artista.')),
+    '',
     S.spotifyMsg && h('div', { class: 'notice', role: 'status' }, S.spotifyMsg),
     todayStrip(), S.today.moods.length ? ui.results : '',
     h('div', { class: 'picker' },
@@ -478,7 +654,7 @@ function openSplash() {
   const rows = MOODS.map((m, i) => h('button', { class: 'w-row', type: 'button', 'aria-pressed': String(pick.has(m)), vars: { '--mc': moodColor(m) }, onclick: () => toggle(i, false) }, h('i'), moodLabel(m)));
 
   const logo = h('span', { class: 'w-logo' });
-  logo.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="wg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2be3f2"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient></defs><path d="M5 6h22a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H15l-6 5v-5H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="url(#wg)"/><g stroke="#0e0b17" stroke-width="2" stroke-linecap="round"><path class="b" d="M9 14v6"/><path class="b" d="M13 11v12"/><path class="b" d="M17 9v16"/><path class="b" d="M21 12v10"/><path class="b" d="M25 14v6"/></g></svg>';
+  logo.innerHTML = LOGO_SVG;
   const word = h('div', { class: 'w-word', 'aria-hidden': 'true' }, 'Sound'.split('').map((c, i) => h('span', { vars: { '--i': i } }, c)), 'Feed'.split('').map((c, i) => h('span', { class: 'fd', vars: { '--i': i + 5 } }, c)));
   const dateTxt = date.charAt(0).toUpperCase() + date.slice(1);
   const top = h('div', { class: 'w-top' }, h('div', { class: 'w-bar' }, modeBtn),
@@ -609,7 +785,9 @@ function openSplash() {
 function route() {
   paintAccount();
   if (!S.ready) return;
-  if (!S.user && !S.guest) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return buildGate(); }
+  if (S.user && S.user.needsName) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('name'); }
+  if (!S.user && !S.guest) { leaveForum(); if (S.offRecent) { S.offRecent(); S.offRecent = null; } $('#nav').replaceChildren(); return openAuth('welcome'); }
+  closeAuth();
   const hash = location.hash.slice(1); paintNav(hash); if (S.today.pending) openSplash();
   if (hash === 'foros') return buildFeed();
   if (hash === 'favoritos') return buildFavs();
