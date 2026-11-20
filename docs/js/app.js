@@ -117,7 +117,7 @@ function paintAccount() {
   const box = $('#account'), u = S.user;
   if (!u) {
     closeMenu(); closeSheet();
-    box.replaceChildren(store.configured ? h('button', { class: 'btn small', type: 'button', onclick: () => { setGuest(false); route(); } }, 'Iniciar sesión') : '');
+    box.replaceChildren(store.configured ? h('button', { class: 'btn small', type: 'button', onclick: () => { setGuest(false); route(); } }, 'Entrar') : '');
     return;
   }
   box.replaceChildren(h('button', { class: 'acct', type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': String(!!MENU), 'aria-label': 'Menú de ' + u.name, onclick: () => (MENU ? closeMenu() : openMenu()) },
