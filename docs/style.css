@@ -402,3 +402,8 @@ a.songchip:hover { background: rgba(43,227,242,.2); }
 .w-row[aria-pressed="true"] i { background: #0e0b17; }
 .w-orb:focus-visible, .w-row:focus-visible, .w-chip:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .w-orb[aria-pressed="true"]::after { animation: none; opacity: 0; } .w-logo .b { animation: none; } .w-word span, .w-word .fd { animation: none; opacity: 1; } .wsplash { animation: none; } }
+
+/* wordmark fits narrow phones */
+.w-word { font-size: clamp(26px, 7.6vw, 38px); }
+.w-logo { width: clamp(40px, 11vw, 56px); height: clamp(40px, 11vw, 56px); }
+.w-brand { gap: 10px; max-width: 100%; }
