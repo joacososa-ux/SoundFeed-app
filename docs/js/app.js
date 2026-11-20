@@ -454,33 +454,155 @@ function todayStrip() {
 }
 function openSplash() {
   if ($('#splash')) return;
-  const changing = !S.today.pending, pick = new Set(S.today.moods), n = MOODS.length;
+  const changing = !S.today.pending, pick = new Set(S.today.moods), N = MOODS.length, STEP = 360 / N;
+  const reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   const date = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const go = h('button', { class: 'btn big', type: 'button' });
-  const upd = () => { go.disabled = !pick.size; go.textContent = pick.size ? 'Continuar con ' + pick.size + (pick.size === 1 ? ' ánimo' : ' ánimos') : 'Elegí al menos un ánimo'; };
-  const items = MOODS.map((m, i) => h('div', { class: 'orb-item', vars: { '--a': (360 * i / n) + 'deg' } },
-    h('div', { class: 'orb-hold' }, h('button', { class: 'orb', type: 'button', vars: { '--mc': moodColor(m), '--i': i }, 'aria-pressed': String(pick.has(m)),
-      onclick: (e) => { pick.has(m) ? pick.delete(m) : pick.add(m); e.currentTarget.setAttribute('aria-pressed', String(pick.has(m))); upd(); } }, h('i'), moodLabel(m)))));
-  const ov = h('div', { id: 'splash', class: 'splash', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tu ánimo de hoy' });
-  const finish = (moods) => {
+  let rot = 0, W = 0, H = 0, R = 200, D = 84, cx = 0, cy = 0, focus = -1, anim = null, drag = null, wt = 0;
+  const norm = (a) => { a %= 360; if (a > 180) a -= 360; if (a < -180) a += 360; return a; };
+
+  const ov = h('div', { id: 'splash', class: 'wsplash', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Tu ánimo de hoy' });
+  const phone = h('div', { class: 'w-phone' });
+  const wheel = h('div', { class: 'w-wheel' }), ring = h('div', { class: 'w-ring' }), glow = h('div', { class: 'w-glow' });
+  const pointer = h('div', { class: 'w-pointer', 'aria-hidden': 'true' });
+  wheel.append(glow, ring);
+  const stage = h('div', { class: 'w-stage', 'aria-label': 'Ruleta de ánimos: arrastrá para girar, tocá para elegir' }, wheel, pointer);
+  const nowEl = h('div', { class: 'w-now', 'aria-live': 'polite' });
+  const tip = h('p', { class: 'w-tip' }, 'Girá la ruleta con el dedo.', h('br'), 'Tocá un ánimo para elegirlo.');
+  const go = h('button', { class: 'btn big w-go', type: 'button' });
+  const modeBtn = h('button', { class: 'w-chip', type: 'button', onclick: () => { const on = phone.classList.toggle('is-list'); modeBtn.textContent = on ? 'Ver ruleta' : 'Ver lista'; } }, 'Ver lista');
+
+  const orbs = MOODS.map((m, i) => {
+    const b = h('button', { class: 'w-orb', type: 'button', 'aria-pressed': String(pick.has(m)), 'data-i': i, vars: { '--mc': moodColor(m) }, onfocus: () => { if (!drag) bringTop(i); } }, moodLabel(m));
+    wheel.append(b); return b;
+  });
+  const rows = MOODS.map((m, i) => h('button', { class: 'w-row', type: 'button', 'aria-pressed': String(pick.has(m)), vars: { '--mc': moodColor(m) }, onclick: () => toggle(i, false) }, h('i'), moodLabel(m)));
+
+  const logo = h('span', { class: 'w-logo' });
+  logo.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="wg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2be3f2"/><stop offset="1" stop-color="#ff3d9a"/></linearGradient></defs><path d="M5 6h22a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H15l-6 5v-5H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="url(#wg)"/><g stroke="#0e0b17" stroke-width="2" stroke-linecap="round"><path class="b" d="M9 14v6"/><path class="b" d="M13 11v12"/><path class="b" d="M17 9v16"/><path class="b" d="M21 12v10"/><path class="b" d="M25 14v6"/></g></svg>';
+  const word = h('div', { class: 'w-word', 'aria-hidden': 'true' }, 'Sound'.split('').map((c, i) => h('span', { vars: { '--i': i } }, c)), 'Feed'.split('').map((c, i) => h('span', { class: 'fd', vars: { '--i': i + 5 } }, c)));
+  const dateTxt = date.charAt(0).toUpperCase() + date.slice(1);
+  const top = h('div', { class: 'w-top' }, h('div', { class: 'w-bar' }, modeBtn),
+    h('div', { class: 'w-brand', role: 'img', 'aria-label': 'SoundFeed' }, logo, word),
+    h('p', { class: 'w-date' }, dateTxt), h('h1', { class: 'w-q' }, '¿Cómo te sentís hoy?'), nowEl, tip);
+  const list = h('div', { class: 'w-list' }, h('h2', {}, 'Elegí tus ánimos'), h('div', { class: 'w-grid' }, rows));
+  const skip = h('button', { class: 'w-skip', type: 'button', onclick: () => finish(changing ? null : []) }, changing ? 'Cancelar' : 'Omitir por hoy');
+  const foot = h('div', { class: 'w-foot' }, go, skip);
+  phone.append(stage, list, top, foot); ov.append(phone);
+
+  function layout() {
+    const r = stage.getBoundingClientRect(); W = r.width; H = r.height;
+    top.style.paddingTop = Math.max(64, Math.round(H * 0.15)) + 'px';
+    const topB = top.getBoundingClientRect().bottom - r.top;
+    cx = W / 2; cy = H * 0.81;
+    D = Math.max(70, Math.min(W * 0.215, 88));
+    R = Math.max(120, Math.min(W * 0.56, 240, cy - topB - 90));
+    wheel.style.left = cx + 'px'; wheel.style.top = cy + 'px';
+    ring.style.width = ring.style.height = (2 * R) + 'px';
+    glow.style.width = glow.style.height = (2 * R * 0.9) + 'px';
+    pointer.style.top = (cy - R - D * 0.61 - 22) + 'px';
+    render();
+  }
+  function render() {
+    let best = 0, bd = 999;
+    for (let i = 0; i < N; i++) {
+      const th = i * STEP + rot, t = th * Math.PI / 180, d = Math.abs(norm(th));
+      const x = R * Math.sin(t), y = -R * Math.cos(t), k = Math.max(0, 1 - d / 60), s = 0.92 + 0.3 * k * k, b = orbs[i];
+      b.style.width = b.style.height = D + 'px';
+      b.style.marginLeft = b.style.marginTop = (-D / 2) + 'px';
+      b.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scale(' + s.toFixed(3) + ')';
+      b.style.opacity = (0.5 + 0.5 * (1 + Math.cos(t)) / 2).toFixed(2);
+      b.style.zIndex = Math.round(k * 10);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best !== focus) { focus = best; nowEl.textContent = moodLabel(MOODS[best]); nowEl.style.color = moodColor(MOODS[best]); }
+  }
+  function stopAnim() { if (anim) { cancelAnimationFrame(anim.id); anim = null; } }
+  function tween(to, ms) {
+    stopAnim();
+    if (reduce) { rot = to; render(); return; }
+    const from = rot, t0 = performance.now(), a = anim = { id: 0 };
+    const step = (now) => {
+      if (anim !== a) return;
+      const p = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+      rot = from + (to - from) * e; render();
+      if (p < 1) a.id = requestAnimationFrame(step); else anim = null;
+    };
+    a.id = requestAnimationFrame(step);
+  }
+  const snap = () => tween(Math.round(rot / STEP) * STEP, 280);
+  function bringTop(i) { tween(rot + norm(-i * STEP - rot), 380); }
+  function inertia(omega) {
+    stopAnim();
+    if (reduce) { snap(); return; }
+    let last = performance.now(); const a = anim = { id: 0 };
+    const step = (now) => {
+      if (anim !== a) return;
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      rot += omega * dt; omega *= Math.exp(-dt * 3.2); render();
+      if (Math.abs(omega) < 16) { anim = null; snap(); return; }
+      a.id = requestAnimationFrame(step);
+    };
+    a.id = requestAnimationFrame(step);
+  }
+  function paint() {
+    MOODS.forEach((m, i) => { const on = pick.has(m); orbs[i].setAttribute('aria-pressed', String(on)); rows[i].setAttribute('aria-pressed', String(on)); });
+    go.disabled = !pick.size;
+    go.textContent = pick.size ? 'Continuar con ' + pick.size + (pick.size === 1 ? ' ánimo' : ' ánimos') : 'Elegí al menos un ánimo';
+  }
+  function toggle(i, spin) { const m = MOODS[i]; if (pick.has(m)) pick.delete(m); else pick.add(m); paint(); if (spin) bringTop(i); }
+
+  const ang = (e) => { const r = stage.getBoundingClientRect(); return Math.atan2(e.clientX - (r.left + cx), -(e.clientY - (r.top + cy))) * 180 / Math.PI; };
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.button && e.button !== 0) return;
+    stopAnim();
+    try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), last: ang(e), moved: 0, target: e.target.closest ? e.target.closest('.w-orb') : null, s: [] };
+  });
+  stage.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0));
+    if (drag.moved <= 6) return;
+    stage.classList.add('grabbing');
+    const a = ang(e), d = norm(a - drag.last); drag.last = a; rot += d; render();
+    const now = performance.now(); drag.s.push({ t: now, d });
+    while (drag.s.length && now - drag.s[0].t > 110) drag.s.shift();
+    tip.classList.add('hide');
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const g = drag; drag = null; stage.classList.remove('grabbing');
+    if (g.moved <= 6 && performance.now() - g.t0 < 600) { if (g.target) toggle(+g.target.dataset.i, true); return; }
+    let sum = 0, span = 0;
+    if (g.s.length > 1) { for (const q of g.s) sum += q.d; span = (g.s[g.s.length - 1].t - g.s[0].t) / 1000; }
+    const omega = span > 0.01 ? sum / span : 0;
+    if (Math.abs(omega) > 40) inertia(Math.max(-900, Math.min(900, omega))); else snap();
+  };
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+  stage.addEventListener('wheel', (e) => { e.preventDefault(); stopAnim(); rot -= (e.deltaY + e.deltaX) * 0.25; render(); clearTimeout(wt); wt = setTimeout(snap, 140); tip.classList.add('hide'); }, { passive: false });
+
+  const onKey = (e) => {
+    if (e.key === 'Escape') { finish(changing ? null : []); return; }
+    if (phone.classList.contains('is-list')) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); tween(Math.round(rot / STEP) * STEP + STEP, 260); }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); tween(Math.round(rot / STEP) * STEP - STEP, 260); }
+  };
+  function finish(moods) {
     if (moods) {
       S.today = { date: dayKey(), moods, pending: false };
       try { localStorage.setItem('sf_today', JSON.stringify({ date: S.today.date, moods })); } catch (_) {}
       S.picked = new Set(moods); S.recs = null; S.recNote = '';
     }
-    ov.classList.add('out'); document.removeEventListener('keydown', onKey);
+    stopAnim(); document.removeEventListener('keydown', onKey); window.removeEventListener('resize', layout);
+    ov.classList.add('out');
     setTimeout(() => { ov.remove(); document.body.classList.remove('noscroll'); if (moods) route(); }, 450);
-  };
-  const onKey = (e) => { if (e.key === 'Escape') finish(changing ? null : []); };
-  document.addEventListener('keydown', onKey);
+  }
   go.addEventListener('click', () => { if (pick.size) finish([...pick]); });
-  const skip = h('button', { class: 'skip', type: 'button', onclick: () => finish(changing ? null : []) }, changing ? 'Cancelar' : 'Omitir por hoy');
-  ov.append(h('div', { class: 'splash-in' },
-    h('div', { class: 'stage' }, h('div', { class: 'orbit' }, items),
-      h('div', { class: 'center' }, h('p', { class: 'eyebrow' }, date.charAt(0).toUpperCase() + date.slice(1)), h('h1', {}, '¿Cómo te sentís hoy?'), h('p', { class: 'hint' }, 'Elegí uno o varios ánimos. Armamos tu música del día.'))),
-    h('div', { class: 'splash-act' }, go, skip)));
-  upd(); document.body.classList.add('noscroll'); document.body.append(ov);
-  const first = ov.querySelector('.orb'); if (first) first.focus({ preventScroll: true });
+  document.addEventListener('keydown', onKey); window.addEventListener('resize', layout);
+  document.body.classList.add('noscroll'); document.body.append(ov);
+  layout(); paint();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (ov.isConnected) layout(); });
+  if (!reduce) { rot = -80; render(); setTimeout(() => { if (ov.isConnected && !drag) tween(0, 1500); }, 250); }
 }
 
 /* ---------- rutas y arranque ---------- */
