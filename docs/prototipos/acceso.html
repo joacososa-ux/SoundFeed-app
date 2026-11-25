@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SoundFeed — Prototipo: acceso, registro y nombre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#0e0b17; --panel:#1a1429; --line:#3a3060; --text:#f3effa; --muted:#a9a0c0; --cyan:#38d6ff; --pink:#ff5fa2; --ok:#5ee6a8; --bad:#ff7a8a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #07050d; color: var(--text); font-family: Inter, system-ui, sans-serif; }
+body { min-height: 100dvh; display: grid; place-items: center; }
+button, input { font: inherit; color: inherit; }
+.phone { position: relative; width: min(100vw, 430px); height: min(100dvh, 900px); overflow: hidden; background: radial-gradient(560px 460px at 50% 0%, #251a45, #0e0b17 70%); }
+@media (min-width: 520px) { .phone { border-radius: 36px; border: 1px solid #241d38; } }
+
+.screen { position: absolute; inset: 0; padding: max(28px, env(safe-area-inset-top)) 24px max(22px, env(safe-area-inset-bottom)); display: none; flex-direction: column; overflow-y: auto; }
+.screen.on { display: flex; animation: in .35s ease both; }
+@keyframes in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.grow { flex: 1; }
+
+/* marca */
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { width: 40px; height: 40px; overflow: visible; }
+.logo .b { transform-box: fill-box; transform-origin: center; animation: eq 1.15s ease-in-out infinite; }
+.logo .b:nth-child(1) { animation-delay: -.9s; } .logo .b:nth-child(2) { animation-delay: -.5s; } .logo .b:nth-child(3) { animation-delay: -.15s; } .logo .b:nth-child(4) { animation-delay: -.7s; } .logo .b:nth-child(5) { animation-delay: -.3s; }
+@keyframes eq { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1.35); } }
+.word { font: 700 28px/1 'Space Grotesk', sans-serif; }
+.word i { font-style: normal; background: linear-gradient(90deg, #38d6ff, #ff5fa2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* acceso */
+.hero { margin-top: 9vh; }
+.hero h1 { margin: 0; font: 700 clamp(34px, 10.5vw, 44px)/1.04 'Space Grotesk', sans-serif; letter-spacing: -.01em; }
+.hero h1 em { font-style: normal; color: var(--pink); }
+.hero p { margin: 14px 0 0; color: var(--muted); font-size: 15px; line-height: 1.5; max-width: 34ch; }
+.actions { display: grid; gap: 12px; margin-top: 28px; }
+.btn { min-height: 54px; border-radius: 16px; border: 1.5px solid var(--line); background: transparent; font-weight: 600; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: transform .1s, border-color .15s; }
+.btn:active { transform: scale(.98); }
+.btn.primary { border: 0; color: #0e0b17; background: linear-gradient(90deg, var(--cyan), var(--pink)); }
+.btn.google { background: #fff; color: #1f1f1f; border: 0; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.sep { display: flex; align-items: center; gap: 12px; margin: 22px 0 4px; color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.sep::before, .sep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.visit { margin: 14px auto 0; background: none; border: 0; color: var(--muted); text-decoration: underline; min-height: 44px; padding: 0 12px; cursor: pointer; font-size: 14px; }
+.legal { margin: 6px 0 0; text-align: center; font-size: 11.5px; color: #7d7498; line-height: 1.5; }
+
+/* formularios */
+.back { align-self: flex-start; background: none; border: 0; color: var(--muted); min-height: 44px; margin-left: -10px; padding: 0 10px; cursor: pointer; font-size: 14px; }
+.title { margin: 14px 0 0; font: 700 30px/1.1 'Space Grotesk', sans-serif; }
+.sub { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; line-height: 1.45; }
+form { display: grid; gap: 16px; margin-top: 24px; }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; color: #d9d2ee; }
+.in { position: relative; }
+.in input { width: 100%; min-height: 54px; padding: 0 16px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--panel); outline: none; font-size: 16px; transition: border-color .15s, box-shadow .15s; }
+.in input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(56, 214, 255, .14); }
+.in input.bad { border-color: var(--bad); }
+.in .eye { position: absolute; right: 6px; top: 6px; width: 42px; height: 42px; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 10px; font-size: 13px; font-weight: 600; }
+.hint { margin: 7px 2px 0; font-size: 12.5px; color: var(--muted); min-height: 16px; }
+.hint.bad { color: var(--bad); }
+.meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 10px; }
+.meter i { height: 5px; border-radius: 3px; background: #2b2347; transition: background .2s; }
+.meter[data-s="1"] i:nth-child(-n+1) { background: var(--bad); }
+.meter[data-s="2"] i:nth-child(-n+2) { background: #ffb84d; }
+.meter[data-s="3"] i:nth-child(-n+3) { background: #c6e35e; }
+.meter[data-s="4"] i { background: var(--ok); }
+.rules { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.rules li::before { content: "○ "; }
+.rules li.ok { color: var(--ok); } .rules li.ok::before { content: "● "; }
+.link { background: none; border: 0; color: var(--cyan); cursor: pointer; font-size: 13.5px; padding: 8px 2px; justify-self: start; }
+.msg { font-size: 13px; color: var(--bad); min-height: 18px; }
+
+/* nombre de usuario */
+.name-wrap { margin-top: 28px; }
+.name-box { position: relative; display: flex; align-items: center; border: 2px solid var(--line); border-radius: 20px; background: var(--panel); padding: 0 16px; transition: border-color .2s, box-shadow .2s; }
+.name-box:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 5px rgba(56, 214, 255, .13); }
+.name-box.ok { border-color: var(--ok); box-shadow: 0 0 0 5px rgba(94, 230, 168, .12); }
+.name-box.bad { border-color: var(--bad); box-shadow: 0 0 0 5px rgba(255, 122, 138, .12); }
+.name-box .at { font: 700 26px 'Space Grotesk', sans-serif; color: var(--muted); }
+.name-box input { flex: 1; min-width: 0; background: none; border: 0; outline: none; min-height: 68px; padding: 0 8px; font: 700 26px 'Space Grotesk', sans-serif; }
+.name-box input::placeholder { color: #5c5379; }
+.state { width: 28px; text-align: center; font-size: 20px; }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--cyan); animation: sp .7s linear infinite; display: inline-block; }
+@keyframes sp { to { transform: rotate(360deg); } }
+.status { margin: 10px 4px 0; min-height: 20px; font-size: 14px; color: var(--muted); }
+.status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chips[hidden] { display: none; }
+.chips button { min-height: 38px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; font-size: 14px; }
+.small { margin: 16px 4px 0; font-size: 12.5px; color: #7d7498; line-height: 1.5; }
+
+/* listo */
+.done { align-items: center; justify-content: center; text-align: center; }
+.done .big { font: 700 34px/1.1 'Space Grotesk', sans-serif; margin: 22px 0 8px; }
+.done .big b { background: linear-gradient(90deg, #38d6ff, #ff5fa2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.check { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; font-size: 38px; color: #0e0b17; background: linear-gradient(135deg, var(--cyan), var(--pink)); animation: pop .6s cubic-bezier(.2, .9, .3, 1.4) both; }
+@keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.steps { display: flex; gap: 6px; margin-top: 4px; }
+.steps i { height: 4px; width: 28px; border-radius: 2px; background: #2b2347; }
+.steps i.on { background: linear-gradient(90deg, var(--cyan), var(--pink)); }
+
+.toolbar { position: fixed; top: 8px; left: 8px; display: flex; gap: 6px; z-index: 9; font-size: 12px; }
+.toolbar button { min-height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid #2b2347; background: #120e20; color: #a9a0c0; cursor: pointer; }
+@media (max-width: 519px) { .toolbar { display: none; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="toolbar" aria-label="Atajos del prototipo">
+  <button data-go="welcome">1 Acceso</button><button data-go="signup">2 Registro</button><button data-go="login">2b Entrar</button><button data-go="name">3 Nombre</button><button data-go="done">4 Listo</button>
+</div>
+
+<main class="phone">
+
+  <!-- 1. ACCESO -->
+  <section class="screen on" id="welcome" aria-label="Acceso">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#38d6ff"/><stop offset="1" stop-color="#ff5fa2"/></linearGradient></defs><rect x="3" y="3" width="34" height="34" rx="9" fill="#1a1429" stroke="url(#g)" stroke-width="1.5"/><rect class="b" x="9" y="14" width="3.4" height="12" rx="1.7" fill="url(#g)"/><rect class="b" x="14.6" y="10" width="3.4" height="20" rx="1.7" fill="url(#g)"/><rect class="b" x="20.2" y="16" width="3.4" height="8" rx="1.7" fill="url(#g)"/><rect class="b" x="25.8" y="12" width="3.4" height="16" rx="1.7" fill="url(#g)"/><rect class="b" x="31" y="17" width="3" height="6" rx="1.5" fill="url(#g)"/></svg>
+      <span class="word">Sound<i>Feed</i></span>
+    </div>
+    <div class="hero">
+      <h1>Descubrí una canción y <em>entrá a la charla.</em></h1>
+      <p>Contanos cómo te sentís o buscá cualquier tema. Cada canción abre su propio foro, donde la comunidad analiza la letra y debate sobre el artista.</p>
+    </div>
+    <div class="grow"></div>
+    <div class="actions">
+      <button class="btn primary" data-go="login">Iniciar sesión</button>
+      <button class="btn" data-go="signup">Registrarme</button>
+      <div class="sep">o</div>
+      <button class="btn google" id="gbtn"><svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.5l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7a14.5 14.5 0 0 1 0-9.4l-7.9-6.1a24 24 0 0 0 0 21.6l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>Continuar con Google</button>
+      <button class="visit" data-go="done" data-visit="1">Entrar como visita (solo lectura)</button>
+    </div>
+    <p class="legal">Al continuar aceptás los términos y la política de privacidad.</p>
+  </section>
+
+  <!-- 2. REGISTRO -->
+  <section class="screen" id="signup" aria-label="Registro">
+    <button class="back" data-go="welcome">← Volver</button>
+    <div class="steps" aria-hidden="true"><i class="on"></i><i></i></div>
+    <h2 class="title">Creá tu cuenta</h2>
+    <p class="sub">Con tu correo y una contraseña segura. Después elegís cómo te llamamos.</p>
+    <form id="fsignup" novalidate>
+      <div class="field"><label for="se">Correo electrónico</label>
+        <div class="in"><input id="se" type="email" autocomplete="email" inputmode="email" placeholder="tucorreo@ejemplo.com" required></div>
+        <div class="hint" id="seh"></div></div>
+      <div class="field"><label for="sp">Contraseña</label>
+        <div class="in"><input id="sp" type="password" autocomplete="new-password" placeholder="Al menos 10 caracteres" required><button type="button" class="eye" data-eye="sp">Ver</button></div>
+        <div class="meter" id="meter" data-s="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <ul class="rules" id="rules"><li data-r="len">10 caracteres o más</li><li data-r="mix">Mayúsculas, minúsculas y un número</li><li data-r="common">No es una contraseña común ni tu correo</li></ul></div>
+      <div class="field"><label for="sp2">Repetí la contraseña</label>
+        <div class="in"><input id="sp2" type="password" autocomplete="new-password" placeholder="Otra vez, para evitar errores" required><button type="button" class="eye" data-eye="sp2">Ver</button></div>
+        <div class="hint" id="sp2h"></div></div>
+      <button class="btn primary" id="sbtn" disabled>Crear cuenta</button>
+    </form>
+    <p class="small">Te vamos a mandar un correo para confirmar tu dirección. Tu contraseña se guarda cifrada y nadie del equipo puede verla.</p>
+  </section>
+
+  <!-- 2b. INICIAR SESIÓN -->
+  <section class="screen" id="login" aria-label="Iniciar sesión">
+    <button class="back" data-go="welcome">← Volver</button>
+    <h2 class="title">Qué bueno verte de nuevo</h2>
+    <p class="sub">Entrá con tu correo y contraseña.</p>
+    <form id="flogin" novalidate>
+      <div class="field"><label for="le">Correo electrónico</label>
+        <div class="in"><input id="le" type="email" autocomplete="email" inputmode="email" placeholder="tucorreo@ejemplo.com"></div></div>
+      <div class="field"><label for="lp">Contraseña</label>
+        <div class="in"><input id="lp" type="password" autocomplete="current-password" placeholder="Tu contraseña"><button type="button" class="eye" data-eye="lp">Ver</button></div>
+        <button type="button" class="link" id="forgot">¿Te olvidaste la contraseña?</button>
+        <div class="msg" id="lmsg" role="alert"></div></div>
+      <button class="btn primary">Entrar</button>
+    </form>
+    <div class="sep">o</div>
+    <button class="btn google" style="margin-top:12px">Continuar con Google</button>
+    <p class="small" style="text-align:center">¿Todavía no tenés cuenta? <button class="link" data-go="signup" style="display:inline;padding:0">Registrate</button></p>
+  </section>
+
+  <!-- 3. NOMBRE -->
+  <section class="screen" id="name" aria-label="Nombre de usuario">
+    <div class="steps" aria-hidden="true" style="margin-top:12px"><i class="on"></i><i class="on"></i></div>
+    <h2 class="title" style="margin-top:34px;font-size:clamp(32px,9.5vw,38px)">¿Cómo querés que te llamemos?</h2>
+    <p class="sub">Es el nombre que van a ver los demás en los foros. Después podés cambiarlo.</p>
+    <div class="name-wrap">
+      <div class="name-box" id="nbox"><span class="at">@</span><input id="nin" type="text" maxlength="20" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="tu_nombre" aria-describedby="nstat"><span class="state" id="nstate" aria-hidden="true"></span></div>
+      <div class="status" id="nstat" role="status" aria-live="polite">De 3 a 20 letras, números o guion bajo.</div>
+      <div class="chips" id="sugg" hidden></div>
+    </div>
+    <p class="small">Probá: <button class="link" id="trytaken" style="padding:0;display:inline">luna</button> (ya existe) para ver cómo avisa cuando está ocupado.</p>
+    <div class="grow"></div>
+    <button class="btn primary" id="nbtn" disabled>Continuar</button>
+  </section>
+
+  <!-- 4. LISTO -->
+  <section class="screen done" id="done" aria-label="Listo">
+    <div class="check" aria-hidden="true">✓</div>
+    <div class="big" id="dtext">Listo, <b>@usuario</b></div>
+    <p class="sub">Ahora contanos cómo te sentís hoy.</p>
+    <p class="small">(Acá sigue la ruleta de ánimos.)</p>
+    <div style="height:18px"></div>
+    <button class="btn" data-go="welcome" style="width:100%">Volver a empezar el prototipo</button>
+  </section>
+</main>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+function go(id) { $$('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); const f = $('#' + id + ' input'); if (f && id !== 'welcome') setTimeout(() => f.focus({ preventScroll: true }), 380); }
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (!b) return; e.preventDefault(); if (b.dataset.visit) $('#dtext').innerHTML = 'Modo <b>visita</b>'; go(b.dataset.go); });
+$('#gbtn').addEventListener('click', () => go('name'));
+$$('[data-eye]').forEach((b) => b.addEventListener('click', () => { const i = $('#' + b.dataset.eye); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.textContent = show ? 'Ocultar' : 'Ver'; }));
+
+/* registro */
+const COMMON = ['password', 'contraseña', '1234567890', 'qwertyuiop', '123456789a', 'soundfeed123', 'abc1234567'];
+function strength(p, email) {
+  const r = { len: p.length >= 10, mix: /[a-z]/.test(p) && /[A-Z]/.test(p) && /\d/.test(p), common: p.length > 0 && !COMMON.includes(p.toLowerCase()) && !(email && p.toLowerCase().includes(email.split('@')[0].toLowerCase()) && email.includes('@') && email.split('@')[0].length > 2) };
+  let s = Object.values(r).filter(Boolean).length; if (p.length >= 14 && s === 3) s = 4; return { r, s: p ? Math.max(1, Math.min(4, s + (p.length >= 14 && s === 3 ? 0 : 0))) : 0, ok: r.len && r.mix && r.common };
+}
+const validEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+function checkSignup() {
+  const e = $('#se').value.trim(), p = $('#sp').value, p2 = $('#sp2').value, st = strength(p, e);
+  $('#meter').dataset.s = st.s; $$('#rules li').forEach((li) => li.classList.toggle('ok', st.r[li.dataset.r]));
+  $('#seh').textContent = e && !validEmail(e) ? 'Revisá el correo: parece que le falta algo.' : ''; $('#seh').className = 'hint' + (e && !validEmail(e) ? ' bad' : '');
+  const same = p2 && p === p2; $('#sp2h').textContent = p2 ? (same ? '✓ Coinciden' : 'No coinciden todavía') : ''; $('#sp2h').className = 'hint' + (p2 && !same ? ' bad' : '');
+  $('#sbtn').disabled = !(validEmail(e) && st.ok && same);
+}
+['se', 'sp', 'sp2'].forEach((i) => $('#' + i).addEventListener('input', checkSignup));
+$('#fsignup').addEventListener('submit', (e) => { e.preventDefault(); if (!$('#sbtn').disabled) go('name'); });
+
+/* login */
+$('#flogin').addEventListener('submit', (e) => { e.preventDefault(); const ok = validEmail($('#le').value.trim()) && $('#lp').value; if (!ok) { $('#lmsg').textContent = 'Correo o contraseña incorrectos.'; return; } $('#lmsg').textContent = ''; $('#dtext').innerHTML = 'Hola de nuevo'; go('done'); });
+$('#forgot').addEventListener('click', () => { $('#lmsg').style.color = 'var(--ok)'; $('#lmsg').textContent = 'Si el correo existe, te mandamos un enlace para cambiarla.'; });
+
+/* nombre de usuario con verificación (simulada) */
+const TAKEN = ['luna', 'sofi', 'joaco', 'admin', 'soundfeed', 'musica'];
+let timer, seq = 0;
+function setName(state, text, cls) { $('#nbox').className = 'name-box ' + (cls || ''); $('#nstate').innerHTML = state; const s = $('#nstat'); s.textContent = text; s.className = 'status ' + (cls || ''); }
+$('#nin').addEventListener('input', (e) => {
+  const raw = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); e.target.value = raw; clearTimeout(timer); $('#nbtn').disabled = true; $('#sugg').hidden = true; const my = ++seq;
+  if (!raw) return setName('', 'De 3 a 20 letras, números o guion bajo.');
+  if (raw.length < 3) return setName('', 'Necesita al menos 3 caracteres.', '');
+  setName('<span class="spin"></span>', 'Verificando disponibilidad…');
+  timer = setTimeout(() => {
+    if (my !== seq) return;
+    if (TAKEN.includes(raw)) { setName('✕', '@' + raw + ' ya está en uso. Probá con otro:', 'bad'); const alt = [raw + '_', raw + (10 + Math.floor(Math.random() * 89)), 'la_' + raw]; $('#sugg').replaceChildren(...alt.map((a) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = '@' + a; b.onclick = () => { $('#nin').value = a; $('#nin').dispatchEvent(new Event('input')); }; return b; })); $('#sugg').hidden = false; }
+    else { setName('✓', '¡@' + raw + ' está disponible!', 'ok'); $('#nbtn').disabled = false; }
+  }, 650);
+});
+$('#trytaken').addEventListener('click', () => { $('#nin').value = 'luna'; $('#nin').dispatchEvent(new Event('input')); });
+$('#nbtn').addEventListener('click', () => { $('#dtext').innerHTML = 'Listo, <b>@' + $('#nin').value + '</b>'; go('done'); });
+$('#nin').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('#nbtn').disabled) $('#nbtn').click(); });
+</script>
+</body>
+</html>

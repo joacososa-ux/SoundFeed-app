@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SoundFeed — Prototipo: ruleta de ánimos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#0e0b17; --panel:#1a1429; --line:#3a3060; --text:#f3effa; --muted:#a9a0c0; --cyan:#38d6ff; --pink:#ff5fa2; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #07050d; color: var(--text); font-family: Inter, system-ui, sans-serif; }
+body { min-height: 100dvh; display: grid; place-items: center; }
+button { font: inherit; color: inherit; }
+.phone { position: relative; width: min(100vw, 430px); height: min(100dvh, 900px); overflow: hidden; background: radial-gradient(520px 520px at 50% 48%, #1d1535, #0e0b17 72%); border-radius: 0; }
+@media (min-width: 520px) { .phone { border-radius: 36px; border: 1px solid #241d38; } }
+
+/* escenario: ocupa todo; la ruleta se sale por los costados */
+.stage { position: absolute; inset: 0; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.stage.grabbing { cursor: grabbing; }
+.wheel { position: absolute; width: 0; height: 0; }
+.ring { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); border: 1.5px dashed var(--line); border-radius: 50%; pointer-events: none; }
+.glow { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(124,92,255,.20), rgba(14,11,23,0) 68%); pointer-events: none; }
+.orb { position: absolute; left: 0; top: 0; border-radius: 50%; border: 2px solid var(--mc); background: var(--panel); color: var(--text); font-weight: 700; font-size: 12.5px; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; will-change: transform; transition: background .2s, color .2s, box-shadow .2s; -webkit-tap-highlight-color: transparent; }
+.orb:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+.orb[aria-pressed="true"] { background: var(--mc); color: #0e0b17; box-shadow: 0 0 26px color-mix(in srgb, var(--mc) 55%, transparent); padding-top: 12px; }
+.orb[aria-pressed="true"]::before { content: "✓"; position: absolute; top: 9px; font-size: 12px; font-weight: 800; }
+.orb[aria-pressed="true"]::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--mc); animation: ping .7s ease-out forwards; pointer-events: none; }
+@keyframes ping { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.45); } }
+.pointer { position: absolute; left: 50%; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 13px solid var(--cyan); transform: translateX(-50%); filter: drop-shadow(0 0 8px rgba(56,214,255,.7)); pointer-events: none; }
+
+/* bloque superior: marca animada, pregunta y ánimo enfocado */
+.top { position: absolute; left: 0; right: 0; top: 0; z-index: 3; padding: 90px 18px 6px; display: grid; justify-items: center; gap: 6px; pointer-events: none; text-align: center; }
+.bar { position: absolute; right: 18px; top: max(10px, env(safe-area-inset-top)); }
+.brand { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.logo { width: 56px; height: 56px; overflow: visible; }
+.logo .b { transform-box: fill-box; transform-origin: center; animation: eq 1.15s ease-in-out infinite; }
+.logo .b:nth-child(1) { animation-delay: -.9s; } .logo .b:nth-child(2) { animation-delay: -.5s; } .logo .b:nth-child(3) { animation-delay: -.15s; } .logo .b:nth-child(4) { animation-delay: -.7s; } .logo .b:nth-child(5) { animation-delay: -.3s; }
+@keyframes eq { 0%, 100% { transform: scaleY(.45); } 50% { transform: scaleY(1.35); } }
+.word { display: flex; font: 700 40px/1 'Space Grotesk', sans-serif; letter-spacing: -.01em; }
+.word span { display: inline-block; opacity: 0; animation: rise .6s cubic-bezier(.2, .9, .3, 1.2) forwards; animation-delay: calc(var(--i) * 55ms + .1s); }
+.word .fd { background: linear-gradient(90deg, #38d6ff, #ff5fa2, #38d6ff); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: rise .6s cubic-bezier(.2, .9, .3, 1.2) forwards, shimmer 4s linear 1.2s infinite; animation-delay: calc(var(--i) * 55ms + .1s), 1.2s; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.date { margin: 4px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--cyan); }
+.q { margin: 2px 0 0; font: 700 25px/1.1 'Space Grotesk', sans-serif; }
+.now { font: 700 34px/1.05 'Space Grotesk', sans-serif; min-height: 36px; transition: color .15s; }
+.tip { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; transition: opacity .4s; }
+.tip.hide { opacity: 0; }
+.chipbtn { pointer-events: auto; min-height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; font-weight: 600; cursor: pointer; }
+.foot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; padding: 40px 22px max(14px, env(safe-area-inset-bottom)); display: grid; justify-items: center; gap: 2px; background: linear-gradient(rgba(14,11,23,0), #0e0b17 48%); pointer-events: none; }
+.go { pointer-events: auto; width: 100%; min-height: 54px; border: 0; border-radius: 16px; font-size: 16px; font-weight: 600; color: #0e0b17; background: linear-gradient(90deg, var(--cyan), var(--pink)); cursor: pointer; }
+.go:disabled { opacity: .45; cursor: not-allowed; }
+.skip { pointer-events: auto; background: none; border: 0; color: var(--muted); min-height: 44px; padding: 0 16px; text-decoration: underline; cursor: pointer; font-size: 14px; }
+
+/* vista de lista (alternativa accesible) */
+.list { position: absolute; inset: 0; z-index: 2; padding: 214px 18px 170px; display: none; overflow-y: auto; align-content: start; }
+.phone.is-list .list { display: grid; gap: 10px; }
+.phone.is-list .q, .phone.is-list .now, .phone.is-list .tip { display: none; }
+.phone.is-list .stage { visibility: hidden; pointer-events: none; }
+.list h2 { margin: 0 0 4px; font: 700 24px 'Space Grotesk', sans-serif; }
+.list .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 16px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 600; font-size: 15px; cursor: pointer; text-align: left; }
+.row i { width: 12px; height: 12px; border-radius: 50%; background: var(--mc); flex: none; }
+.row[aria-pressed="true"] { background: var(--mc); border-color: var(--mc); color: #0e0b17; }
+.row[aria-pressed="true"] i { background: #0e0b17; }
+
+/* pantalla final del prototipo */
+.done { position: absolute; inset: 0; z-index: 5; display: none; place-content: center; justify-items: center; gap: 16px; text-align: center; padding: 28px; background: #0e0b17; }
+.phone.is-done .done { display: grid; }
+.done h2 { margin: 0; font: 700 28px/1.1 'Space Grotesk', sans-serif; }
+.done p { margin: 0; color: var(--muted); font-size: 14px; max-width: 30ch; line-height: 1.5; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chips span { background: var(--mc); color: #0e0b17; font-weight: 700; font-size: 14px; padding: 7px 14px; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) { .orb[aria-pressed="true"]::after { animation: none; opacity: 0; } .logo .b { animation: none; } .word span, .word .fd { animation: none; opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="stage" id="stage" aria-label="Ruleta de ánimos: arrastrá para girar, tocá para elegir">
+    <div class="wheel" id="wheel">
+      <div class="glow" id="glow"></div>
+      <div class="ring" id="ring"></div>
+    </div>
+    <div class="pointer" id="pointer" aria-hidden="true"></div>
+  </div>
+
+  <div class="list" id="list">
+    <h2>¿Cómo te sentís hoy?</h2>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="top">
+    <div class="bar"><button class="chipbtn" id="mode" type="button">Ver lista</button></div>
+    <div class="brand" role="img" aria-label="SoundFeed">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38d6ff"/><stop offset="1" stop-color="#ff5fa2"/></linearGradient></defs><path d="M5 6h22a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H15l-6 5v-5H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" fill="url(#g)"/><g stroke="#0e0b17" stroke-width="2" stroke-linecap="round"><path class="b" d="M9 14v6"/><path class="b" d="M13 11v12"/><path class="b" d="M17 9v16"/><path class="b" d="M21 12v10"/><path class="b" d="M25 14v6"/></g></svg>
+      <div class="word" aria-hidden="true"><span style="--i:0">S</span><span style="--i:1">o</span><span style="--i:2">u</span><span style="--i:3">n</span><span style="--i:4">d</span><span class="fd" style="--i:5">F</span><span class="fd" style="--i:6">e</span><span class="fd" style="--i:7">e</span><span class="fd" style="--i:8">d</span></div>
+    </div>
+    <p class="date">Viernes, 20 de noviembre</p>
+    <h1 class="q">¿Cómo te sentís hoy?</h1>
+    <div class="now" id="now" aria-live="polite"></div>
+    <p class="tip" id="tip">Girá la ruleta con el dedo.<br>Tocá un ánimo para elegirlo.</p>
+  </div>
+
+  <div class="foot">
+    <button class="go" id="go" type="button" disabled>Elegí al menos un ánimo</button>
+    <button class="skip" id="skip" type="button">Omitir por hoy</button>
+  </div>
+
+  <div class="done" id="done">
+    <h2 id="doneT">Listo</h2>
+    <div class="chips" id="doneChips"></div>
+    <p id="doneP"></p>
+    <button class="chipbtn" id="again" type="button" style="pointer-events:auto">Volver a probar</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  var MOODS = [
+    { n: 'Feliz', c: '#ffd166' }, { n: 'Energético', c: '#ff7a45' }, { n: 'Motivado', c: '#38d6ff' },
+    { n: 'Relajado', c: '#4fe3b1' }, { n: 'Reflexivo', c: '#9fb3c8' }, { n: 'Nostálgico', c: '#c79bff' },
+    { n: 'Triste', c: '#6c8cff' }, { n: 'Intenso', c: '#ff4d6d' }, { n: 'Romántico', c: '#ff5fa2' }
+  ];
+  var N = MOODS.length, STEP = 360 / N;
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var phone = $('phone'), stage = $('stage'), wheel = $('wheel'), ring = $('ring'), glow = $('glow'), pointer = $('pointer'),
+      nowEl = $('now'), tip = $('tip'), go = $('go'), topEl = document.querySelector('.top');
+  var rot = 0, W = 0, H = 0, R = 200, D = 84, cx = 0, cy = 0, focus = -1;
+  var sel = new Set();
+  var anim = null, drag = null;
+
+  var orbs = MOODS.map(function (m, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'orb'; b.textContent = m.n; b.setAttribute('aria-pressed', 'false');
+    b.style.setProperty('--mc', m.c); b.dataset.i = i;
+    b.addEventListener('focus', function () { if (!drag) bringToTop(i); });
+    wheel.appendChild(b); return b;
+  });
+  var rows = MOODS.map(function (m, i) {
+    var r = document.createElement('button');
+    r.type = 'button'; r.className = 'row'; r.setAttribute('aria-pressed', 'false'); r.style.setProperty('--mc', m.c);
+    r.innerHTML = '<i></i>' + m.n;
+    r.addEventListener('click', function () { toggle(i, false); });
+    $('grid').appendChild(r); return r;
+  });
+
+  function norm(a) { a = a % 360; if (a > 180) a -= 360; if (a < -180) a += 360; return a; }
+
+  function layout() {
+    var r = stage.getBoundingClientRect(); W = r.width; H = r.height;
+    topEl.style.paddingTop = Math.max(64, Math.round(H * 0.15)) + 'px';
+    var topB = topEl.getBoundingClientRect().bottom - r.top;
+    cx = W / 2; cy = H * 0.81;
+    D = Math.max(70, Math.min(W * 0.215, 88));
+    R = Math.max(120, Math.min(W * 0.56, 240, cy - topB - 90));
+    wheel.style.left = cx + 'px'; wheel.style.top = cy + 'px';
+    ring.style.width = ring.style.height = (2 * R) + 'px';
+    glow.style.width = glow.style.height = (2 * R * 0.9) + 'px';
+    pointer.style.top = (cy - R - D * 0.61 - 22) + 'px';
+    render();
+  }
+
+  function render() {
+    var best = 0, bd = 999;
+    for (var i = 0; i < N; i++) {
+      var th = i * STEP + rot, t = th * Math.PI / 180, d = Math.abs(norm(th));
+      var x = R * Math.sin(t), y = -R * Math.cos(t);
+      var k = Math.max(0, 1 - d / 60), s = 0.92 + 0.3 * k * k;
+      var b = orbs[i];
+      b.style.width = b.style.height = D + 'px';
+      b.style.marginLeft = b.style.marginTop = (-D / 2) + 'px';
+      b.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scale(' + s.toFixed(3) + ')';
+      b.style.opacity = (0.5 + 0.5 * (1 + Math.cos(t)) / 2).toFixed(2);
+      b.style.zIndex = Math.round(k * 10);
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best !== focus) { focus = best; nowEl.textContent = MOODS[best].n; nowEl.style.color = MOODS[best].c; }
+  }
+
+  /* animaciones */
+  function stopAnim() { if (anim) { cancelAnimationFrame(anim.id); anim = null; } }
+  function tween(to, ms, done) {
+    stopAnim();
+    if (reduce) { rot = to; render(); if (done) done(); return; }
+    var from = rot, t0 = performance.now();
+    var a = anim = { id: 0 };
+    (function step(now) {
+      if (anim !== a) return;
+      var p = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - p, 3);
+      rot = from + (to - from) * e; render();
+      if (p < 1) a.id = requestAnimationFrame(step); else { anim = null; if (done) done(); }
+    })(t0);
+  }
+  function snap() { tween(Math.round(rot / STEP) * STEP, 280); }
+  function bringToTop(i) { var target = -i * STEP; tween(rot + norm(target - rot), 380); }
+  function inertia(omega) {
+    stopAnim();
+    if (reduce) { snap(); return; }
+    var a = anim = { id: 0 }, last = performance.now();
+    (function step(now) {
+      if (anim !== a) return;
+      var dt = Math.min(0.05, (now - last) / 1000); last = now;
+      rot += omega * dt; omega *= Math.exp(-dt * 3.2); render();
+      if (Math.abs(omega) < 16) { anim = null; snap(); return; }
+      a.id = requestAnimationFrame(step);
+    })(last);
+  }
+
+  /* selección */
+  function paint() {
+    var n = sel.size;
+    for (var i = 0; i < N; i++) {
+      var on = sel.has(i);
+      orbs[i].setAttribute('aria-pressed', String(on));
+      rows[i].setAttribute('aria-pressed', String(on));
+    }
+    go.disabled = !n;
+    go.textContent = n ? 'Continuar con ' + n + (n === 1 ? ' ánimo' : ' ánimos') : 'Elegí al menos un ánimo';
+  }
+  function toggle(i, spin) {
+    if (sel.has(i)) sel.delete(i); else sel.add(i);
+    paint();
+    if (spin) bringToTop(i);
+  }
+
+  /* gestos */
+  function ang(e) {
+    var r = stage.getBoundingClientRect();
+    return Math.atan2(e.clientX - (r.left + cx), -(e.clientY - (r.top + cy))) * 180 / Math.PI;
+  }
+  stage.addEventListener('pointerdown', function (e) {
+    if (e.button && e.button !== 0) return;
+    stopAnim();
+    try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), last: ang(e), moved: 0, target: e.target.closest ? e.target.closest('.orb') : null, s: [] };
+  });
+  stage.addEventListener('pointermove', function (e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.moved = Math.max(drag.moved, Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0));
+    if (drag.moved <= 6) return;
+    stage.classList.add('grabbing');
+    var a = ang(e), d = norm(a - drag.last); drag.last = a;
+    rot += d; render();
+    var now = performance.now(); drag.s.push({ t: now, d: d });
+    while (drag.s.length && now - drag.s[0].t > 110) drag.s.shift();
+    if (!tip.classList.contains('hide')) tip.classList.add('hide');
+  });
+  function end(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var g = drag; drag = null; stage.classList.remove('grabbing');
+    if (g.moved <= 6 && performance.now() - g.t0 < 600) {
+      if (g.target) toggle(+g.target.dataset.i, true);
+      return;
+    }
+    var sum = 0, span = 0;
+    if (g.s.length > 1) { for (var i = 0; i < g.s.length; i++) sum += g.s[i].d; span = (g.s[g.s.length - 1].t - g.s[0].t) / 1000; }
+    var omega = span > 0.01 ? sum / span : 0;
+    if (Math.abs(omega) > 40) inertia(Math.max(-900, Math.min(900, omega))); else snap();
+  }
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+  stage.addEventListener('wheel', function (e) {
+    e.preventDefault(); stopAnim(); rot -= (e.deltaY + e.deltaX) * 0.25; render();
+    clearTimeout(stage._w); stage._w = setTimeout(snap, 140);
+  }, { passive: false });
+  document.addEventListener('keydown', function (e) {
+    if (phone.classList.contains('is-list') || phone.classList.contains('is-done')) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); tween(Math.round(rot / STEP) * STEP + STEP, 260); }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); tween(Math.round(rot / STEP) * STEP - STEP, 260); }
+  });
+
+  /* botones */
+  $('mode').addEventListener('click', function () {
+    var on = phone.classList.toggle('is-list');
+    this.textContent = on ? 'Ver ruleta' : 'Ver lista';
+  });
+  function finish(skipped) {
+    var names = Array.from(sel).sort(function (a, b) { return a - b; });
+    $('doneT').textContent = skipped ? 'Hasta mañana' : 'Tus ánimos de hoy';
+    var c = $('doneChips'); c.innerHTML = '';
+    if (!skipped) names.forEach(function (i) { var s = document.createElement('span'); s.style.setProperty('--mc', MOODS[i].c); s.textContent = MOODS[i].n; c.appendChild(s); });
+    $('doneP').textContent = skipped ? 'Descubrir se muestra como siempre.' : 'Acá seguiría Descubrir, con "Para tu ánimo hoy" armado con estos ánimos.';
+    phone.classList.add('is-done');
+  }
+  go.addEventListener('click', function () { if (sel.size) finish(false); });
+  $('skip').addEventListener('click', function () { finish(true); });
+  $('again').addEventListener('click', function () { phone.classList.remove('is-done'); });
+
+  window.addEventListener('resize', layout);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
+  layout(); paint();
+  /* entrada: la ruleta se acomoda sola para mostrar que gira */
+  if (!reduce) { rot = -80; render(); setTimeout(function () { tween(0, 1500); }, 250); }
+})();
+</script>
+</body>
+</html>
